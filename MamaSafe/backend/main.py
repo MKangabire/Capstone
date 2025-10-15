@@ -5,7 +5,6 @@ import joblib
 import os
 import numpy as np
 from supabase import create_client, Client
-import httpx  # ✅ ADDED: MISSING IMPORT
 from dotenv import load_dotenv
 import json
 
@@ -28,6 +27,26 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 print(f"🔑 Supabase URL: {SUPABASE_URL[:20]}...")
 print(f"🔑 Supabase Key: {SUPABASE_KEY[:20]}...")
 
+# ✅ ULTRA-SIMPLE SUPABASE INIT (Works on ALL versions)
+supabase = None
+try:
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        raise ValueError("Missing SUPABASE_URL or SUPABASE_KEY")
+    
+    # ✅ Disable proxy environment variables (fixes 'proxy' bug)
+    os.environ['HTTP_PROXY'] = ''
+    os.environ['HTTPS_PROXY'] = ''
+    
+    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+    
+    # ✅ Test connection
+    response = supabase.table("predictions").select("count").execute()
+    print(f"✅ Supabase connected! Response: {response}")
+    
+except Exception as e:
+    print(f"❌ Supabase initialization failed: {e}")
+    supabase = None
+
 # Load the model
 model_path = os.path.join(os.path.dirname(__file__), 'gdm_model.pkl')
 try:
@@ -37,37 +56,6 @@ try:
 except Exception as e:
     print(f"⚠️ Warning: Could not load model - {e}")
     model = None
-
-# ✅ FIXED SUPABASE INITIALIZATION (Single Block)
-supabase = None
-try:
-    if not SUPABASE_URL or not SUPABASE_KEY:
-        raise ValueError("Missing SUPABASE_URL or SUPABASE_KEY")
-    
-    # ✅ FIXED: Custom HTTP client with CORRECT variable names & timeout
-    custom_http_client = httpx.Client(
-        timeout=httpx.Timeout(30.0),  # ✅ FIXED: timeou → timeout
-        verify=True,
-        trust_env=False  # ✅ Disables proxy auto-detection
-    )
-    
-    # ✅ FIXED: Use correct variable names
-    supabase: Client = create_client(
-        SUPABASE_URL,  # ✅ FIXED: was supabase_url
-        SUPABASE_KEY,  # ✅ FIXED: was supabase_key
-        options={
-            "http_client": custom_http_client
-        }
-    )
-    
-    # ✅ Test connection
-    response = supabase.table("predictions").select("count").execute()
-    print(f"✅ Supabase connected! Response: {response}")
-    print("✅ Supabase client initialized!")
-    
-except Exception as e:
-    print(f"❌ Supabase initialization failed: {e}")
-    supabase = None
 
 # Define input model
 class PredictionInput(BaseModel):
