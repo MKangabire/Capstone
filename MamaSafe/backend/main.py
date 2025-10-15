@@ -133,8 +133,8 @@ async def predict(input_data: PredictionInput):
             'risk_level': risk_level,
             'risk_percentage': risk_percentage,
             'confidence': confidence,
-            'factores': json.dumps(factors),
-            'recommendatons': json.dumps(recommendations)
+            'factors': json.dumps(factors),
+            'recommendations': json.dumps(recommendations)
         }
         print(f"💾 Supabase data: {supabase_data}")
         
