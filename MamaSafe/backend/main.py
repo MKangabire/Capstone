@@ -7,8 +7,18 @@ import numpy as np
 from supabase import create_client, Client
 from dotenv import load_dotenv
 import json
+from fastapi import Request
+from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 
 app = FastAPI()
+
+# Exception handler for validation errors
+@app.exception_handler(ValidationError)
+async def validation_exception_handler(request: Request, exc: ValidationError):
+    error_details = exc.errors()
+    print(f"❌ Validation error: {error_details}")  # ✅ Logs exact error
+    return JSONResponse(status_code=400, content={"detail": error_details})
 
 # CORS configuration
 app.add_middleware(
