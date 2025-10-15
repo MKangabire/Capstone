@@ -93,6 +93,7 @@ async def predict(input_data: PredictionInput):
         raise HTTPException(status_code=500, detail="Model not loaded")
     
     try:
+        print(f"🔍 Received input data: {input_data.dict()}")
         # Prepare input data
         features = np.array([[
             input_data.age,
