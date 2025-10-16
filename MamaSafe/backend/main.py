@@ -73,6 +73,8 @@ async def health_check():
 
 @app.post("/api/predict")
 async def predict(input_data: PredictionInput):
+    print('🚀 === PREDICT ENDPOINT HIT ===')
+    print(f"🔍 RAW INPUT: {input_data}")
     if model is None:
         raise HTTPException(status_code=500, detail="Model not loaded")
     
