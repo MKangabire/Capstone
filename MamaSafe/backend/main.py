@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, ValidationError, validator  # ✅ FIXED: validator added
 from fastapi.middleware.cors import CORSMiddleware
 import joblib
 import os
@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 import json
 from fastapi import Request
 from fastapi.responses import JSONResponse
-from pydantic import ValidationError
+import traceback  # ✅ ADDED: For full error trace
 
 app = FastAPI()
 
@@ -183,14 +183,10 @@ async def predict(input_data: PredictionInput):
             risk_factors_list.append("No significant risk factors detected")
         
         # Format for display (newline-separated for Flutter)
-        recommendations_text = "\n".join([f"{rec}" for rec in recommendations_list])
-        risk_factors_text = "\n".join([f"{factor}" for factor in risk_factors_list])
-        
-        print(f"💬 Recommendations: {recommendations_text}")
-        print(f"💬 Risk Factors: {risk_factors_text}")
+        recommendations_text = "\n".join([f"• {rec}" for rec in recommendations_list])
+        risk_factors_text = "\n".join([f"• {factor}" for factor in risk_factors_list])
         
         # Save to Supabase
-        supabase_success = False
         if supabase is not None:
             try:
                 supabase_data = {
@@ -204,24 +200,19 @@ async def predict(input_data: PredictionInput):
                 }
                 
                 print(f"💾 Attempting to save to Supabase...")
-                print(f"💾 Data to insert: {supabase_data}")
+                print(f"💾 Data: {supabase_data}")
                 
                 response = supabase.table('predictions').insert(supabase_data).execute()
-                
-                print(f"✅ Supabase insert SUCCESS!")
-                print(f"✅ Response data: {response.data}")
-                print(f"✅ Response count: {len(response.data) if response.data else 0}")
-                supabase_success = True
+                print(f"✅ Supabase insert success!")
+                print(f"✅ Response: {response.data}")
                 
             except Exception as supabase_error:
-                print(f"❌ Supabase insert FAILED!")
-                print(f"❌ Error: {supabase_error}")
-                print(f"❌ Error type: {type(supabase_error).__name__}")
-                import traceback
-                print(f"❌ Full traceback:\n{traceback.format_exc()}")
+                print(f"❌ Supabase insert failed: {supabase_error}")
+                print(f"❌ Error type: {type(supabase_error)}")
+                print(f"❌ Full traceback: {traceback.format_exc()}")  # ✅ FULL LOGGING
                 # Don't fail the request if Supabase fails
         else:
-            print("⚠️ Supabase client is None - skipping database insert")
+            print("⚠️ Supabase client not available - skipping database insert")
         
         # Return prediction result (this goes to Flutter)
         return {
@@ -232,15 +223,13 @@ async def predict(input_data: PredictionInput):
             "risk_percentage": round(risk_percentage, 1),
             "confidence": round(confidence, 1),
             "recommendations": recommendations_text,  # Send as text to Flutter
-            "risk_factors": risk_factors_text,  # Send as text to Flutter
-            "supabase_saved": supabase_success  # For debugging
+            "risk_factors": risk_factors_text  # Send as text to Flutter
         }
         
     except Exception as e:
         print(f"⚠️ Prediction error: {e}")
-        print(f"⚠️ Error type: {type(e).__name__}")
-        import traceback
-        print(f"⚠️ Traceback:\n{traceback.format_exc()}")
+        print(f"⚠️ Error type: {type(e)}")
+        print(f"⚠️ Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
 
 # Handle HEAD requests
