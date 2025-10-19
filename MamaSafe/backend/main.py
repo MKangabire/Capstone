@@ -26,7 +26,7 @@ app.add_middleware(
 load_dotenv()
 SUPABASE_URL = os.getenv("SUPABASE_URL") or "https://ntyqznoigmjsymenundu.supabase.co"
 SUPABASE_KEY = os.getenv("SUPABASE_KEY") or "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im50eXF6bm9pZ21qc3ltZW51bmR1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAwMTY2MDYsImV4cCI6MjA3NTU5MjYwNn0.oIDPZDy_4gaY05XfMpLiQCXJrKYL7RUHc450zBU__fk"
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
 print(f"🔑 Supabase URL: {SUPABASE_URL[:20]}...")
 print(f"🔑 Supabase Key: {SUPABASE_KEY[:20]}...")
 
@@ -192,7 +192,7 @@ async def create_prediction(input_data: PredictionInput):
         # Save to Supabase
         supabase_data = {
             'patient_id': input_data.patient_id,
-            'health_data_id': f"gdm_{input_data.patient_id}_{int(datetime.now().timestamp())}",
+            # ✅ REMOVED health_data_id - it's not needed or set it to None if column exists
             'risk_level': risk_level,
             'risk_percentage': round(risk_percentage, 2),
             'confidence': round(confidence, 2),
