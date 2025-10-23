@@ -208,7 +208,7 @@ async def create_prediction(input_data: PredictionInput):
         if is_high_risk:
             try:
                 # Get patient's assigned CHW
-                chw_response = supabase.table('patients').select('chw_id').eq('id', input_data.patient_id).execute()
+                chw_response = supabase.table('profiles').select('region,chw_id').eq('id', input_data.patient_id).execute()
                 if chw_response.data and chw_response.data[0].get('chw_id'):
                     chw_id = chw_response.data[0]['chw_id']
                     notification_data = {
