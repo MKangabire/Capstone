@@ -43,12 +43,25 @@ except Exception as e:
     supabase = None
 
 # Load ML Model
+# Load ML Model
 model_path = os.path.join(os.path.dirname(__file__), 'gdm_model.pkl')
+print(f"Model path: {model_path}")
+print(f"File exists: {os.path.exists(model_path)}")
+if os.path.exists(model_path):
+    print(f"File size: {os.path.getsize(model_path)} bytes")
+else:
+    print("MODEL FILE MISSING!")
+
 try:
     model = joblib.load(model_path)
-    print("✅ Model loaded successfully!")
+    print("Model loaded successfully!")
+    print(f"Model type: {type(model)}")
+    print(f"Model classes: {getattr(model, 'classes_', 'N/A')}")
 except Exception as e:
-    print(f"⚠️ Warning: Could not load model - {e}")
+    print(f"MODEL LOAD FAILED: {e}")
+    print(f"ERROR TYPE: {type(e).__name__}")
+    import traceback
+    print(traceback.format_exc())
     model = None
 
 # ==================== PYDANTIC MODELS ====================
