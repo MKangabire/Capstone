@@ -1,0 +1,30 @@
+{
+  "province": {
+    "name": "Northern Province",
+    "districts": [
+      {
+        "name": "Musanze District",
+        "sectors": [
+          {
+            "name": "Muhoza Sector",
+            "cells": [
+              {
+                "name": "Kigombe Cell",
+                "villages": [
+                  "Byimana Village"
+                ]
+              },
+              {
+                "name": "Cyabararika Cell",
+                "villages": [
+                  "Gasanze Village",
+                  "Buhuye Village"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

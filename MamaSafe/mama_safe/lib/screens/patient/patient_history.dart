@@ -1,4 +1,8 @@
+// lib/screens/patient/patient_history.dart
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:mama_safe/services/auth_service.dart';
 
 class PatientHistory extends StatefulWidget {
   const PatientHistory({super.key});
@@ -7,604 +11,403 @@ class PatientHistory extends StatefulWidget {
   State<PatientHistory> createState() => _PatientHistoryState();
 }
 
-class _PatientHistoryState extends State<PatientHistory>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  final String _selectedFilter = 'All Time';
-
-  final List<String> _filterOptions = [
-    'All Time',
-    'This Week',
-    'This Month',
-    'Last 3 Months',
-  ];
-
-  // Mock data - replace with actual data from your backend
-  final List<Map<String, dynamic>> _glucoseHistory = [
-    {
-      'date': '2024-10-01',
-      'time': '08:00 AM',
-      'value': 95,
-      'mealTime': 'Fasting',
-      'status': 'Normal',
-    },
-    {
-      'date': '2024-09-30',
-      'time': '02:30 PM',
-      'value': 142,
-      'mealTime': 'After Lunch',
-      'status': 'High',
-    },
-    {
-      'date': '2024-09-30',
-      'time': '08:15 AM',
-      'value': 88,
-      'mealTime': 'Fasting',
-      'status': 'Normal',
-    },
-    {
-      'date': '2024-09-29',
-      'time': '07:45 PM',
-      'value': 118,
-      'mealTime': 'After Dinner',
-      'status': 'Normal',
-    },
-  ];
-
-  final List<Map<String, dynamic>> _bloodPressureHistory = [
-    {
-      'date': '2024-10-01',
-      'time': '08:00 AM',
-      'systolic': 118,
-      'diastolic': 76,
-      'status': 'Normal',
-    },
-    {
-      'date': '2024-09-30',
-      'time': '02:30 PM',
-      'systolic': 135,
-      'diastolic': 88,
-      'status': 'Elevated',
-    },
-    {
-      'date': '2024-09-29',
-      'time': '07:45 PM',
-      'systolic': 122,
-      'diastolic': 79,
-      'status': 'Normal',
-    },
-  ];
-
-  final List<Map<String, dynamic>> _weightHistory = [
-    {
-      'date': '2024-10-01',
-      'weight': 65.5,
-      'bmi': 24.1,
-      'change': '+0.5',
-    },
-    {
-      'date': '2024-09-24',
-      'weight': 65.0,
-      'bmi': 23.9,
-      'change': '+0.3',
-    },
-    {
-      'date': '2024-09-17',
-      'weight': 64.7,
-      'bmi': 23.8,
-      'change': '+0.4',
-    },
-  ];
+class _PatientHistoryState extends State<PatientHistory> {
+  final AuthService _authService = AuthService();
+  final String _apiBaseUrl = 'https://capstone-kubh.onrender.com';
+  
+  List<Map<String, dynamic>> _predictions = [];
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _fetchPredictions();
   }
 
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
+  Future<void> _fetchPredictions() async {
+    setState(() => _isLoading = true);
+    try {
+      final userId = _authService.currentUser?.id;
+      if (userId == null) return;
 
-  Color _getStatusColor(String status) {
-    switch (status.toLowerCase()) {
-      case 'normal':
-        return Colors.green;
-      case 'high':
-      case 'elevated':
-        return Colors.orange;
-      case 'low':
-      case 'critical':
-        return Colors.red;
-      default:
-        return Colors.grey;
+      final response = await http.get(
+        Uri.parse('$_apiBaseUrl/api/predictions/$userId'),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        setState(() {
+          _predictions = List<Map<String, dynamic>>.from(data['predictions'] ?? []);
+        });
+      }
+    } catch (e) {
+      print('Error fetching predictions: $e');
+    } finally {
+      setState(() => _isLoading = false);
     }
+  }
+
+  Color _getRiskColor(String? riskLevel) {
+    if (riskLevel == null) return Colors.grey;
+    final risk = riskLevel.toLowerCase();
+    if (risk.contains('high')) return Colors.red;
+    if (risk.contains('medium') || risk.contains('moderate')) return Colors.orange;
+    if (risk.contains('low')) return Colors.green;
+    return Colors.grey;
+  }
+
+  String _getRiskEmoji(String? riskLevel) {
+    if (riskLevel == null) return '❓';
+    final risk = riskLevel.toLowerCase();
+    if (risk.contains('high')) return '🔴';
+    if (risk.contains('medium')) return '🟡';
+    if (risk.contains('low')) return '🟢';
+    return '❓';
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: const Text("Health History"),
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Colors.white,
-          tabs: const [
-            Tab(text: "Glucose"),
-            Tab(text: "Blood Pressure"),
-            Tab(text: "Weight"),
+        title: const Text('Assessment History', style: TextStyle(fontWeight: FontWeight.w600)),
+        backgroundColor: Colors.pink[400],
+        foregroundColor: Colors.white,
+        elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _fetchPredictions,
+          ),
+        ],
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: _fetchPredictions,
+              child: _predictions.isEmpty
+                  ? _buildEmptyState()
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: _predictions.length,
+                      itemBuilder: (context, index) {
+                        return _buildPredictionCard(_predictions[index]);
+                      },
+                    ),
+            ),
+      floatingActionButton: _predictions.isNotEmpty
+          ? FloatingActionButton.extended(
+              onPressed: () {
+                _showExportDialog(context);
+              },
+              icon: const Icon(Icons.download),
+              label: const Text("Export"),
+              backgroundColor: Colors.pink[400],
+            )
+          : null,
+    );
+  }
+
+  Widget _buildPredictionCard(Map<String, dynamic> prediction) {
+    final riskLevel = prediction['risk_level'] ?? 'Unknown';
+    final riskPercentage = prediction['risk_percentage']?.toString() ?? '0';
+    final confidence = prediction['confidence']?.toString() ?? '0';
+    final createdAt = prediction['created_at']?.toString() ?? '';
+    final factors = prediction['factors'];
+    final recommendations = prediction['recommendations'];
+
+    final riskColor = _getRiskColor(riskLevel);
+    final riskEmoji = _getRiskEmoji(riskLevel);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          childrenPadding: const EdgeInsets.all(20),
+          leading: Container(
+            width: 50,
+            height: 50,
+            decoration: BoxDecoration(
+              color: riskColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Center(
+              child: Text(riskEmoji, style: const TextStyle(fontSize: 24)),
+            ),
+          ),
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                riskLevel,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: riskColor,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Risk: $riskPercentage% • Confidence: $confidence%',
+                style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+              ),
+            ],
+          ),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Row(
+              children: [
+                Icon(Icons.calendar_today, size: 14, color: Colors.grey[500]),
+                const SizedBox(width: 4),
+                Text(
+                  _formatDate(createdAt),
+                  style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                ),
+              ],
+            ),
+          ),
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey[50],
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Risk Factors
+                  if (factors != null && factors.toString().isNotEmpty) ...[
+                    Row(
+                      children: [
+                        Icon(Icons.warning_amber_rounded, color: Colors.orange[700], size: 20),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Risk Factors',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.orange[50],
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.orange[200]!),
+                      ),
+                      child: Text(
+                        factors.toString(),
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[800],
+                          height: 1.5,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  
+                  // Recommendations
+                  if (recommendations != null && recommendations.toString().isNotEmpty) ...[
+                    Row(
+                      children: [
+                        Icon(Icons.lightbulb, color: Colors.blue[700], size: 20),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Recommendations',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.blue[50],
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.blue[200]!),
+                      ),
+                      child: Text(
+                        recommendations.toString(),
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[800],
+                          height: 1.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ],
         ),
       ),
-      body: Column(
-        children: [
-          // You can add a filter dropdown here if needed
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildGlucoseHistory(),
-                _buildBloodPressureHistory(),
-                _buildWeightHistory(),
-              ],
-            ),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Export feature coming soon')),
-          );
-        },
-        icon: const Icon(Icons.download),
-        label: const Text("Export"),
-        backgroundColor: Colors.pink[400],
-      ),
     );
   }
 
-  Widget _buildGlucoseHistory() {
-    if (_glucoseHistory.isEmpty) {
-      return _buildEmptyState("No glucose readings yet");
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _glucoseHistory.length,
-      itemBuilder: (context, index) {
-        final reading = _glucoseHistory[index];
-        final statusColor = _getStatusColor(reading['status']);
-
-        return Card(
-          margin: const EdgeInsets.only(bottom: 12),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(15),
-          ),
-          elevation: 2,
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.calendar_today,
-                            size: 16, color: Colors.grey[600]),
-                        const SizedBox(width: 6),
-                        Text(
-                          reading['date'],
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: statusColor.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        reading['status'],
-                        style: TextStyle(
-                          color: statusColor,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      reading['value'].toString(),
-                      style: const TextStyle(
-                        fontSize: 36,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Text(
-                        "mg/dL",
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Icon(Icons.restaurant_menu,
-                        size: 16, color: Colors.grey[600]),
-                    const SizedBox(width: 6),
-                    Text(
-                      reading['mealTime'],
-                      style: TextStyle(
-                        color: Colors.grey[700],
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Icon(Icons.access_time, size: 16, color: Colors.grey[600]),
-                    const SizedBox(width: 6),
-                    Text(
-                      reading['time'],
-                      style: TextStyle(
-                        color: Colors.grey[700],
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildBloodPressureHistory() {
-    if (_bloodPressureHistory.isEmpty) {
-      return _buildEmptyState("No blood pressure readings yet");
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _bloodPressureHistory.length,
-      itemBuilder: (context, index) {
-        final reading = _bloodPressureHistory[index];
-        final statusColor = _getStatusColor(reading['status']);
-
-        return Card(
-          margin: const EdgeInsets.only(bottom: 12),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(15),
-          ),
-          elevation: 2,
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.calendar_today,
-                            size: 16, color: Colors.grey[600]),
-                        const SizedBox(width: 6),
-                        Text(
-                          reading['date'],
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 14,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Icon(Icons.access_time,
-                            size: 16, color: Colors.grey[600]),
-                        const SizedBox(width: 6),
-                        Text(
-                          reading['time'],
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: statusColor.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        reading['status'],
-                        style: TextStyle(
-                          color: statusColor,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.red[50],
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Column(
-                          children: [
-                            Icon(Icons.arrow_upward,
-                                color: Colors.red[400], size: 20),
-                            const SizedBox(height: 4),
-                            Text(
-                              reading['systolic'].toString(),
-                              style: const TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            Text(
-                              "Systolic",
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey[600],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.blue[50],
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Column(
-                          children: [
-                            Icon(Icons.arrow_downward,
-                                color: Colors.blue[400], size: 20),
-                            const SizedBox(height: 4),
-                            Text(
-                              reading['diastolic'].toString(),
-                              style: const TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            Text(
-                              "Diastolic",
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey[600],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildWeightHistory() {
-    if (_weightHistory.isEmpty) {
-      return _buildEmptyState("No weight records yet");
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _weightHistory.length,
-      itemBuilder: (context, index) {
-        final record = _weightHistory[index];
-        final isGain = record['change'].toString().startsWith('+');
-
-        return Card(
-          margin: const EdgeInsets.only(bottom: 12),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(15),
-          ),
-          elevation: 2,
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.calendar_today,
-                            size: 16, color: Colors.grey[600]),
-                        const SizedBox(width: 6),
-                        Text(
-                          record['date'],
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isGain
-                            ? Colors.green[50]
-                            : Colors.orange[50],
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            isGain
-                                ? Icons.trending_up
-                                : Icons.trending_down,
-                            size: 16,
-                            color: isGain ? Colors.green : Colors.orange,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            record['change'],
-                            style: TextStyle(
-                              color: isGain ? Colors.green : Colors.orange,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.purple[50],
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Column(
-                          children: [
-                            Icon(Icons.monitor_weight,
-                                color: Colors.purple[400], size: 28),
-                            const SizedBox(height: 8),
-                            Text(
-                              "${record['weight']} kg",
-                              style: const TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            Text(
-                              "Weight",
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey[600],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.teal[50],
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Column(
-                          children: [
-                            Icon(Icons.calculate,
-                                color: Colors.teal[400], size: 28),
-                            const SizedBox(height: 8),
-                            Text(
-                              record['bmi'].toString(),
-                              style: const TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            Text(
-                              "BMI",
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey[600],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildEmptyState(String message) {
+  Widget _buildEmptyState() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.folder_open,
-            size: 80,
-            color: Colors.grey[300],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            message,
-            style: TextStyle(
-              fontSize: 18,
-              color: Colors.grey[600],
+      child: Padding(
+        padding: const EdgeInsets.all(40),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.pink[50],
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.history,
+                size: 80,
+                color: Colors.pink[300],
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            "Start logging your health data",
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey[500],
+            const SizedBox(height: 24),
+            const Text(
+              'No Assessment History',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
             ),
+            const SizedBox(height: 12),
+            Text(
+              'Your GDM risk assessments will appear here once you complete your first prediction.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[600],
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 32),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.pop(context); // Go back to dashboard
+              },
+              icon: const Icon(Icons.add_circle_outline),
+              label: const Text('Create Assessment'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.pink[400],
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showExportDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.pink[50],
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.download, color: Colors.pink[400], size: 24),
+            ),
+            const SizedBox(width: 12),
+            const Text('Export History', style: TextStyle(fontSize: 18)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Export your assessment history as:',
+              style: TextStyle(fontSize: 15),
+            ),
+            const SizedBox(height: 20),
+            ListTile(
+              leading: Icon(Icons.picture_as_pdf, color: Colors.red[400]),
+              title: const Text('PDF Document'),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: Colors.grey[300]!),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('PDF export coming soon!')),
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+            ListTile(
+              leading: Icon(Icons.table_chart, color: Colors.green[400]),
+              title: const Text('Excel Spreadsheet'),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: Colors.grey[300]!),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Excel export coming soon!')),
+                );
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
           ),
         ],
       ),
     );
+  }
+
+  String _formatDate(String? dateString) {
+    if (dateString == null || dateString.isEmpty) return 'Unknown date';
+    try {
+      final date = DateTime.parse(dateString);
+      final now = DateTime.now();
+      final diff = now.difference(date);
+      
+      if (diff.inDays == 0) {
+        return 'Today';
+      } else if (diff.inDays == 1) {
+        return 'Yesterday';
+      } else if (diff.inDays < 7) {
+        return '${diff.inDays} days ago';
+      } else {
+        return '${date.day}/${date.month}/${date.year}';
+      }
+    } catch (e) {
+      return dateString.substring(0, 10);
+    }
   }
 }

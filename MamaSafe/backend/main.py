@@ -344,7 +344,7 @@ async def update_patient(patient_id: str, update_data: PatientUpdate):
         data_dict = {k: v for k, v in update_data.dict().items() if v is not None}
         
         if not data_dict:
-            raise HTTPException(status_code=400, detail="No data to update")
+            raise HTTPException(status_code=422, detail="No data to update")
         
         # Calculate BMI if height and weight provided
         if 'height' in data_dict and 'weight' in data_dict:
@@ -361,6 +361,8 @@ async def update_patient(patient_id: str, update_data: PatientUpdate):
             "message": "Patient updated successfully",
             "patient": response.data[0] if response.data else None
         }
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"❌ Error updating patient: {e}")
         raise HTTPException(status_code=500, detail=str(e))
