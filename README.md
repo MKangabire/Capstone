@@ -59,7 +59,7 @@ The goal is to enable **early diagnosis**, improve **maternal health monitoring*
 
 **📺 Watch the 5-minute demo showcasing core functionalities:**
 
-[![MamaSafe Demo](https://img.shields.io/badge/▶️_Watch_Demo-FF0000?style=for-the-badge&logo=youtube&logoColor=white)](https://youtu.be/CId8E_KyEnA)
+[![MamaSafe Demo](https://img.shields.io/badge/▶️_Watch_Demo-FF0000?style=for-the-badge&logo=youtube&logoColor=white)](https://youtu.be/-5ETXAE9xXY)
 
 **Video Link:** [https://youtu.be/-5ETXAE9xXY](demo video)
 

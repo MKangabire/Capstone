@@ -1,3 +1,5 @@
+// lib/screens/chw/chw_dashboard.dart - COMPLETE FILE
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:mama_safe/services/supabase_service.dart';
@@ -94,7 +96,7 @@ class _CHWDashboardHomeState extends State<CHWDashboardHome> {
   int pendingVisits = 0;
   int todayAppointments = 0;
   int newAlerts = 0;
-  String chwName = 'Sarah';
+  String chwName = 'CHW';
   bool _isLoading = false;
 
   @override
@@ -105,96 +107,96 @@ class _CHWDashboardHomeState extends State<CHWDashboardHome> {
   }
 
   Future<void> _fetchData() async {
-  setState(() => _isLoading = true);
-  try {
-    final chwId = _supabase.auth.currentUser?.id;
-    if (chwId == null) throw 'No user logged in';
+    setState(() => _isLoading = true);
+    try {
+      final chwId = _supabase.auth.currentUser?.id;
+      if (chwId == null) throw 'No user logged in';
 
-    // Fetch CHW profile
-    final profile = await _supabase
-        .from('profiles')
-        .select('full_name')
-        .eq('id', chwId)
-        .single();
-    chwName = profile['full_name'] ?? 'CHW';
-
-    // Total patients assigned to this CHW
-    final patientsResponse = await _supabase
-        .from('profiles')
-        .select('id')
-        .eq('chw_id', chwId)
-        .eq('role', 'patient');
-    totalPatients = patientsResponse.length;
-
-    // Get patient IDs for further queries
-    final patientIds = patientsResponse.map((p) => p['id']).toList();
-
-    if (patientIds.isNotEmpty) {
-      // High-risk patients (from predictions)
-      final highRiskResponse = await _supabase
-          .from('predictions')
-          .select('patient_id')
-          .inFilter('patient_id', patientIds)
-          .ilike('risk_level', '%high%');
+      final profile = await _supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', chwId)
+          .single();
       
-      // Count unique patients with high risk
-      final uniqueHighRisk = highRiskResponse
-          .map((p) => p['patient_id'])
-          .toSet()
-          .length;
-      highRiskPatients = uniqueHighRisk;
-    }
+      setState(() {
+        chwName = profile['full_name'] ?? 'CHW';
+      });
 
-    // Pending visits (if you have visits table)
-    try {
-      final visitsResponse = await _supabase
-          .from('visits')
-          .select('id')
+      final patientsResponse = await _supabase
+          .from('profiles')
+          .select('id, full_name')
           .eq('chw_id', chwId)
-          .eq('status', 'pending');
-      pendingVisits = visitsResponse.length;
-    } catch (e) {
-      print('Visits table not available: $e');
-      pendingVisits = 0;
-    }
-
-    // Today's appointments
-    try {
-      final today = DateTime.now();
-      final startOfDay = DateTime(today.year, today.month, today.day);
-      final endOfDay = startOfDay.add(const Duration(days: 1));
+          .eq('role', 'patient');
       
-      final todayVisits = await _supabase
-          .from('visits')
-          .select('id')
-          .eq('chw_id', chwId)
-          .gte('scheduled_date', startOfDay.toIso8601String())
-          .lt('scheduled_date', endOfDay.toIso8601String());
-      todayAppointments = todayVisits.length;
-    } catch (e) {
-      print('Visits query error: $e');
-      todayAppointments = 0;
-    }
+      totalPatients = patientsResponse.length;
 
-    // New alerts/notifications
-    try {
-      final alertsResponse = await _supabase
-          .from('notifications')
-          .select('id')
-          .eq('chw_id', chwId)
-          .eq('is_read', false);
-      newAlerts = alertsResponse.length;
-    } catch (e) {
-      print('Notifications table not available: $e');
-      newAlerts = 0;
-    }
+      final patientIds = patientsResponse.map((p) => p['id'] as String).toList();
 
-    setState(() {});
+      if (patientIds.isNotEmpty) {
+        final predictionsResponse = await _supabase
+            .from('predictions')
+            .select('patient_id, risk_level, created_at')
+            .inFilter('patient_id', patientIds)
+            .order('created_at', ascending: false);
+        
+        final Map<String, String> latestPredictions = {};
+        for (var pred in predictionsResponse) {
+          final patientId = pred['patient_id'];
+          if (!latestPredictions.containsKey(patientId)) {
+            latestPredictions[patientId] = pred['risk_level']?.toString().toLowerCase() ?? 'low';
+          }
+        }
+        
+        highRiskPatients = latestPredictions.values.where((risk) => risk.contains('high')).length;
+      }
+
+      try {
+        final today = DateTime.now();
+        final visitsResponse = await _supabase
+            .from('appointments')
+            .select('id')
+            .eq('chw_id', chwId)
+            .eq('status', 'pending')
+            .gte('scheduled_date', today.toIso8601String());
+        pendingVisits = visitsResponse.length;
+      } catch (e) {
+        pendingVisits = 0;
+      }
+
+      try {
+        final today = DateTime.now();
+        final startOfDay = DateTime(today.year, today.month, today.day);
+        final endOfDay = startOfDay.add(const Duration(days: 1));
+        final todayVisits = await _supabase
+            .from('appointments')
+            .select('id')
+            .eq('chw_id', chwId)
+            .gte('scheduled_date', startOfDay.toIso8601String())
+            .lt('scheduled_date', endOfDay.toIso8601String());
+        todayAppointments = todayVisits.length;
+      } catch (e) {
+        todayAppointments = 0;
+      }
+
+      try {
+        final alertsResponse = await _supabase
+            .from('notifications')
+            .select('id')
+            .eq('chw_id', chwId)
+            .eq('is_read', false);
+        newAlerts = alertsResponse.length;
+      } catch (e) {
+        newAlerts = 0;
+      }
+
+      setState(() {});
     } catch (e) {
-      print('Error fetching data: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      print('❌ Error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
     } finally {
       setState(() => _isLoading = false);
     }
@@ -204,18 +206,13 @@ class _CHWDashboardHomeState extends State<CHWDashboardHome> {
     final chwId = _supabase.auth.currentUser?.id;
     if (chwId == null) return;
 
-    // Subscribe to profiles for patient count
     SupabaseService.subscribeToTable('profiles', (payload) {
       if (payload.eventType == PostgresChangeEvent.insert ||
           payload.eventType == PostgresChangeEvent.update) {
-        if (payload.newRecord['chw_id'] == chwId &&
-            payload.newRecord['role'] == 'patient') {
-          _fetchData();
-        }
+        _fetchData();
       }
     });
 
-    // Subscribe to predictions for high-risk patients
     SupabaseService.subscribeToTable('predictions', (payload) {
       if (payload.eventType == PostgresChangeEvent.insert ||
           payload.eventType == PostgresChangeEvent.update) {
@@ -223,23 +220,9 @@ class _CHWDashboardHomeState extends State<CHWDashboardHome> {
       }
     });
 
-    // Subscribe to visits for pending visits and appointments
-    SupabaseService.subscribeToTable('visits', (payload) {
-      if (payload.eventType == PostgresChangeEvent.insert ||
-          payload.eventType == PostgresChangeEvent.update) {
-        if (payload.newRecord['chw_id'] == chwId) {
-          _fetchData();
-        }
-      }
-    });
-
-    // Subscribe to notifications for new alerts
     SupabaseService.subscribeToTable('notifications', (payload) {
-      if (payload.eventType == PostgresChangeEvent.insert ||
-          payload.eventType == PostgresChangeEvent.update) {
-        if (payload.newRecord['chw_id'] == chwId) {
-          _fetchData();
-        }
+      if (payload.newRecord['chw_id'] == chwId) {
+        _fetchData();
       }
     });
   }
@@ -251,12 +234,12 @@ class _CHWDashboardHomeState extends State<CHWDashboardHome> {
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _fetchData,
-          child: _isLoading
+          child: _isLoading && totalPatients == 0
               ? const Center(child: CircularProgressIndicator())
               : CustomScrollView(
                   slivers: [
                     SliverAppBar(
-                      expandedHeight: 200,
+                      expandedHeight: 180,
                       floating: false,
                       pinned: true,
                       backgroundColor: Colors.blue[700],
@@ -269,134 +252,94 @@ class _CHWDashboardHomeState extends State<CHWDashboardHome> {
                               colors: [Colors.blue[700]!, Colors.blue[500]!],
                             ),
                           ),
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(20, 60, 20, 20),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Container(
-                                      width: 50,
-                                      height: 50,
-                                      decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        shape: BoxShape.circle,
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.black.withOpacity(
-                                              0.1,
-                                            ),
-                                            blurRadius: 10,
-                                            offset: const Offset(0, 4),
-                                          ),
-                                        ],
-                                      ),
-                                      child: Center(
-                                        child: Text(
-                                          chwName.isNotEmpty
-                                              ? chwName[0].toUpperCase()
-                                              : 'SN',
-                                          style: TextStyle(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.blue[700],
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            "Hello, $chwName! 👋",
-                                            style: const TextStyle(
-                                              fontSize: 22,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          const Text(
-                                            "Community Health Worker",
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              color: Colors.white70,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 20),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 12,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.15),
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: Colors.white.withOpacity(0.3),
-                                      width: 1,
-                                    ),
-                                  ),
-                                  child: Row(
+                          child: SafeArea(
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Row(
                                     children: [
-                                      const Icon(
-                                        Icons.calendar_today,
-                                        color: Colors.white,
-                                        size: 16,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        _formatDate(DateTime.now()),
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                      const Spacer(),
                                       Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 10,
-                                          vertical: 4,
-                                        ),
+                                        width: 50,
+                                        height: 50,
                                         decoration: BoxDecoration(
                                           color: Colors.white,
-                                          borderRadius: BorderRadius.circular(
-                                            8,
+                                          shape: BoxShape.circle,
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.black.withOpacity(0.1),
+                                              blurRadius: 10,
+                                              offset: const Offset(0, 4),
+                                            ),
+                                          ],
+                                        ),
+                                        child: Center(
+                                          child: Text(
+                                            chwName.isNotEmpty ? chwName[0].toUpperCase() : 'C',
+                                            style: TextStyle(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.blue[700],
+                                            ),
                                           ),
                                         ),
-                                        child: Row(
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            Icon(
-                                              Icons.event_available,
-                                              color: Colors.blue[700],
-                                              size: 14,
-                                            ),
-                                            const SizedBox(width: 4),
                                             Text(
-                                              "$todayAppointments visits today",
-                                              style: TextStyle(
-                                                color: Colors.blue[700],
-                                                fontSize: 11,
+                                              "Hello, $chwName! 👋",
+                                              style: const TextStyle(
+                                                fontSize: 20,
                                                 fontWeight: FontWeight.bold,
+                                                color: Colors.white,
                                               ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            const SizedBox(height: 2),
+                                            const Text(
+                                              "Community Health Worker",
+                                              style: TextStyle(fontSize: 12, color: Colors.white70),
                                             ),
                                           ],
                                         ),
                                       ),
                                     ],
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(height: 12),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withOpacity(0.15),
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(color: Colors.white.withOpacity(0.3), width: 1),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(Icons.calendar_today, color: Colors.white, size: 14),
+                                        const SizedBox(width: 6),
+                                        Flexible(
+                                          child: Text(
+                                            _formatDate(DateTime.now()),
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ),
@@ -405,24 +348,15 @@ class _CHWDashboardHomeState extends State<CHWDashboardHome> {
                         IconButton(
                           icon: Stack(
                             children: [
-                              const Icon(
-                                Icons.notifications_outlined,
-                                color: Colors.white,
-                              ),
+                              const Icon(Icons.notifications_outlined, color: Colors.white),
                               if (newAlerts > 0)
                                 Positioned(
                                   right: 0,
                                   top: 0,
                                   child: Container(
                                     padding: const EdgeInsets.all(4),
-                                    decoration: const BoxDecoration(
-                                      color: Colors.red,
-                                      shape: BoxShape.circle,
-                                    ),
-                                    constraints: const BoxConstraints(
-                                      minWidth: 16,
-                                      minHeight: 16,
-                                    ),
+                                    decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                                    constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
                                     child: Text(
                                       '$newAlerts',
                                       style: const TextStyle(
@@ -439,9 +373,7 @@ class _CHWDashboardHomeState extends State<CHWDashboardHome> {
                           onPressed: () {
                             Navigator.push(
                               context,
-                              MaterialPageRoute(
-                                builder: (context) => const CHWNotifications(),
-                              ),
+                              MaterialPageRoute(builder: (context) => const CHWNotifications()),
                             );
                           },
                         ),
@@ -462,14 +394,10 @@ class _CHWDashboardHomeState extends State<CHWDashboardHome> {
                                     value: totalPatients.toString(),
                                     icon: Icons.people,
                                     color: Colors.blue,
-                                    trend: null,
                                     onTap: () {
                                       Navigator.push(
                                         context,
-                                        MaterialPageRoute(
-                                          builder: (context) =>
-                                              const CHWPatientList(),
-                                        ),
+                                        MaterialPageRoute(builder: (context) => const CHWPatientList()),
                                       );
                                     },
                                   ),
@@ -482,16 +410,12 @@ class _CHWDashboardHomeState extends State<CHWDashboardHome> {
                                     value: highRiskPatients.toString(),
                                     icon: Icons.warning_amber_rounded,
                                     color: Colors.red,
-                                    trend: null,
-                                    urgent: true,
+                                    urgent: highRiskPatients > 0,
                                     onTap: () {
                                       Navigator.push(
                                         context,
                                         MaterialPageRoute(
-                                          builder: (context) =>
-                                              const CHWPatientList(
-                                                filterHighRisk: true,
-                                              ),
+                                          builder: (context) => const CHWPatientList(filterHighRisk: true),
                                         ),
                                       );
                                     },
@@ -509,14 +433,10 @@ class _CHWDashboardHomeState extends State<CHWDashboardHome> {
                                     value: pendingVisits.toString(),
                                     icon: Icons.schedule,
                                     color: Colors.orange,
-                                    trend: null,
                                     onTap: () {
                                       Navigator.push(
                                         context,
-                                        MaterialPageRoute(
-                                          builder: (context) =>
-                                              const CHWVisitScheduler(),
-                                        ),
+                                        MaterialPageRoute(builder: (context) => const CHWVisitScheduler()),
                                       );
                                     },
                                   ),
@@ -529,14 +449,10 @@ class _CHWDashboardHomeState extends State<CHWDashboardHome> {
                                     value: newAlerts.toString(),
                                     icon: Icons.notifications_active,
                                     color: Colors.purple,
-                                    trend: null,
                                     onTap: () {
                                       Navigator.push(
                                         context,
-                                        MaterialPageRoute(
-                                          builder: (context) =>
-                                              const CHWNotifications(),
-                                        ),
+                                        MaterialPageRoute(builder: (context) => const CHWNotifications()),
                                       );
                                     },
                                   ),
@@ -549,40 +465,11 @@ class _CHWDashboardHomeState extends State<CHWDashboardHome> {
                               children: [
                                 const Text(
                                   "Quick Actions",
-                                  style: TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.black87,
-                                  ),
-                                ),
-                                TextButton.icon(
-                                  onPressed: () {},
-                                  icon: const Icon(Icons.more_horiz, size: 18),
-                                  label: const Text("More"),
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: Colors.blue[700],
-                                  ),
+                                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87),
                                 ),
                               ],
                             ),
                             const SizedBox(height: 16),
-                            _buildQuickActionCard(
-                              context,
-                              title: "Schedule Visit",
-                              subtitle: "Plan home visits for your patients",
-                              icon: Icons.calendar_today,
-                              color: Colors.green,
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) =>
-                                        const CHWVisitScheduler(),
-                                  ),
-                                );
-                              },
-                            ),
-                            const SizedBox(height: 12),
                             _buildQuickActionCard(
                               context,
                               title: "View Reports",
@@ -592,21 +479,9 @@ class _CHWDashboardHomeState extends State<CHWDashboardHome> {
                               onTap: () {
                                 Navigator.push(
                                   context,
-                                  MaterialPageRoute(
-                                    builder: (context) => const CHWReports(),
-                                  ),
+                                  MaterialPageRoute(builder: (context) => const CHWReports()),
                                 );
                               },
-                            ),
-                            const SizedBox(height: 12),
-                            _buildQuickActionCard(
-                              context,
-                              title: "Emergency Contact",
-                              subtitle: "Quick access to healthcare facility",
-                              icon: Icons.emergency,
-                              color: Colors.red,
-                              urgent: true,
-                              onTap: () => _showEmergencyDialog(context),
                             ),
                             const SizedBox(height: 28),
                             Row(
@@ -614,71 +489,87 @@ class _CHWDashboardHomeState extends State<CHWDashboardHome> {
                               children: [
                                 const Text(
                                   "Recent Alerts",
-                                  style: TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.black87,
-                                  ),
+                                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87),
                                 ),
                                 TextButton(
                                   onPressed: () {
                                     Navigator.push(
                                       context,
-                                      MaterialPageRoute(
-                                        builder: (context) =>
-                                            const CHWNotifications(),
-                                      ),
+                                      MaterialPageRoute(builder: (context) => const CHWNotifications()),
                                     );
                                   },
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: Colors.blue[700],
-                                  ),
                                   child: const Text("View All"),
                                 ),
                               ],
                             ),
                             const SizedBox(height: 12),
-                            // Recent alerts fetched dynamically
                             FutureBuilder<List<Map<String, dynamic>>>(
                               future: _fetchRecentAlerts(),
                               builder: (context, snapshot) {
-                                if (snapshot.connectionState ==
-                                    ConnectionState.waiting) {
+                                if (snapshot.connectionState == ConnectionState.waiting) {
                                   return const Center(
-                                    child: CircularProgressIndicator(),
+                                    child: Padding(
+                                      padding: EdgeInsets.all(20.0),
+                                      child: CircularProgressIndicator(),
+                                    ),
                                   );
                                 }
+                                
                                 if (snapshot.hasError) {
-                                  return Text('Error: ${snapshot.error}');
+                                  return Container(
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      color: Colors.orange[50],
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.info_outline, color: Colors.orange[700]),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Text('Could not load alerts', style: TextStyle(color: Colors.orange[900])),
+                                        ),
+                                      ],
+                                    ),
+                                  );
                                 }
+                                
                                 final alerts = snapshot.data ?? [];
+                                
+                                if (alerts.isEmpty) {
+                                  return Container(
+                                    padding: const EdgeInsets.all(24),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey[100],
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: Center(
+                                      child: Column(
+                                        children: [
+                                          Icon(Icons.notifications_none, size: 48, color: Colors.grey[400]),
+                                          const SizedBox(height: 12),
+                                          Text('No recent alerts', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                }
+                                
                                 return Column(
-                                  children: alerts.isEmpty
-                                      ? [const Text('No recent alerts')]
-                                      : alerts.take(3).map((alert) {
-                                          return Padding(
-                                            padding: const EdgeInsets.only(
-                                              bottom: 10,
-                                            ),
-                                            child: _buildAlertCard(
-                                              context,
-                                              patientName:
-                                                  alert['patient_name'],
-                                              message: alert['message'],
-                                              time: _formatTimestamp(
-                                                alert['timestamp'],
-                                              ),
-                                              icon: _getIconForAlert(
-                                                alert['type'],
-                                              ),
-                                              color: _getColorForAlert(
-                                                alert['type'],
-                                              ),
-                                              isUrgent:
-                                                  alert['type'] == 'urgent',
-                                            ),
-                                          );
-                                        }).toList(),
+                                  children: alerts.map((alert) {
+                                    return Padding(
+                                      padding: const EdgeInsets.only(bottom: 10),
+                                      child: _buildAlertCard(
+                                        context,
+                                        patientName: alert['patient_name'],
+                                        message: alert['message'],
+                                        time: _formatTimestamp(alert['timestamp']),
+                                        icon: _getIconForAlert(alert['type']),
+                                        color: _getColorForAlert(alert['type']),
+                                        isUrgent: alert['type'] == 'urgent',
+                                      ),
+                                    );
+                                  }).toList(),
                                 );
                               },
                             ),
@@ -694,159 +585,81 @@ class _CHWDashboardHomeState extends State<CHWDashboardHome> {
   }
 
   Future<List<Map<String, dynamic>>> _fetchRecentAlerts() async {
-    final chwId = _supabase.auth.currentUser?.id;
-    if (chwId == null) return [];
+    try {
+      final chwId = _supabase.auth.currentUser?.id;
+      if (chwId == null) return [];
 
-    final response = await _supabase
-        .from('notifications')
-        .select('''
-          id, title, message, timestamp, type, is_read,
-          profiles!notifications_patient_id_fkey(full_name)
-        ''')
-        .eq('chw_id', chwId)
-        .order('timestamp', ascending: false)
-        .limit(3);
+      final response = await _supabase
+          .from('notifications')
+          .select('id, title, message, created_at, type, is_read, patient_id, profiles!notifications_patient_id_fkey(full_name)')
+          .eq('chw_id', chwId)
+          .order('created_at', ascending: false)
+          .limit(3);
 
-    return response
-        .map(
-          (n) => {
-            'patient_name': n['profiles']['full_name'],
-            'message': n['message'],
-            'timestamp': n['timestamp'],
-            'type': n['type'],
-            'is_read': n['is_read'],
-          },
-        )
-        .toList();
+      return response.map<Map<String, dynamic>>((n) {
+        final type = (n['type'] ?? 'info').toString().toLowerCase();
+        String patientName = 'Unknown Patient';
+        if (n['profiles'] != null && n['profiles']['full_name'] != null) {
+          patientName = n['profiles']['full_name'];
+        }
+
+        return {
+          'patient_name': patientName,
+          'message': n['message'] ?? 'No message',
+          'timestamp': n['created_at'] ?? DateTime.now().toIso8601String(),
+          'type': type.contains('high') || type.contains('urgent') || type.contains('risk') ? 'urgent' : type,
+          'is_read': n['is_read'] ?? false,
+        };
+      }).toList();
+    } catch (e) {
+      print('❌ Error fetching alerts: $e');
+      return [];
+    }
   }
 
   IconData _getIconForAlert(String type) {
-    switch (type) {
-      case 'urgent':
-        return Icons.bloodtype;
-      case 'reminder':
-        return Icons.calendar_today;
-      case 'update':
-        return Icons.update;
-      default:
-        return Icons.notifications;
+    final lowerType = type.toLowerCase();
+    if (lowerType.contains('urgent') || lowerType.contains('high') || lowerType.contains('risk')) {
+      return Icons.warning_amber_rounded;
+    } else if (lowerType.contains('reminder')) {
+      return Icons.calendar_today;
+    } else if (lowerType.contains('update')) {
+      return Icons.info_outline;
     }
+    return Icons.notifications;
   }
 
   Color _getColorForAlert(String type) {
-    switch (type) {
-      case 'urgent':
-        return Colors.red;
-      case 'reminder':
-        return Colors.blue;
-      case 'update':
-        return Colors.green;
-      default:
-        return Colors.grey;
+    final lowerType = type.toLowerCase();
+    if (lowerType.contains('urgent') || lowerType.contains('high') || lowerType.contains('risk')) {
+      return Colors.red;
+    } else if (lowerType.contains('reminder')) {
+      return Colors.blue;
+    } else if (lowerType.contains('update')) {
+      return Colors.green;
     }
+    return Colors.grey;
   }
 
   String _formatDate(DateTime date) {
-    final months = [
-      'January',
-      'February',
-      'March',
-      'April',
-      'May',
-      'June',
-      'July',
-      'August',
-      'September',
-      'October',
-      'November',
-      'December',
-    ];
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     return "${months[date.month - 1]} ${date.day}, ${date.year}";
   }
 
   String _formatTimestamp(String timestamp) {
-    final now = DateTime.now();
-    final dateTime = DateTime.parse(timestamp.replaceAll(' ', 'T'));
-    final difference = now.difference(dateTime);
+    try {
+      final now = DateTime.now();
+      final dateTime = DateTime.parse(timestamp);
+      final difference = now.difference(dateTime);
 
-    if (difference.inMinutes < 60) {
-      return "${difference.inMinutes} min ago";
-    } else if (difference.inHours < 24) {
-      return "${difference.inHours} hour${difference.inHours > 1 ? 's' : ''} ago";
-    } else if (difference.inDays < 7) {
-      return "${difference.inDays} day${difference.inDays > 1 ? 's' : ''} ago";
-    } else {
+      if (difference.inMinutes < 1) return "Just now";
+      if (difference.inMinutes < 60) return "${difference.inMinutes} min ago";
+      if (difference.inHours < 24) return "${difference.inHours} hour${difference.inHours > 1 ? 's' : ''} ago";
+      if (difference.inDays < 7) return "${difference.inDays} day${difference.inDays > 1 ? 's' : ''} ago";
       return "${dateTime.day}/${dateTime.month}/${dateTime.year}";
+    } catch (e) {
+      return "Recently";
     }
-  }
-
-  void _showEmergencyDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.red[50],
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.emergency, color: Colors.red, size: 28),
-            ),
-            const SizedBox(width: 12),
-            const Text("Emergency Contact", style: TextStyle(fontSize: 18)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              "Call the healthcare facility emergency line?",
-              style: TextStyle(fontSize: 15),
-            ),
-            const SizedBox(height: 20),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.grey[100],
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.phone, color: Colors.blue[700]),
-                  const SizedBox(width: 8),
-                  const Text(
-                    "+250 123 456 789",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
-          ),
-          ElevatedButton.icon(
-            onPressed: () {
-              Navigator.pop(context);
-              // TODO: Implement call functionality
-            },
-            icon: const Icon(Icons.phone),
-            label: const Text("Call Now"),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _buildStatCard(
@@ -856,7 +669,6 @@ class _CHWDashboardHomeState extends State<CHWDashboardHome> {
     required IconData icon,
     required Color color,
     required VoidCallback onTap,
-    String? trend,
     bool urgent = false,
   }) {
     return InkWell(
@@ -867,14 +679,10 @@ class _CHWDashboardHomeState extends State<CHWDashboardHome> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
-          border: urgent
-              ? Border.all(color: Colors.red.withOpacity(0.3), width: 2)
-              : null,
+          border: urgent ? Border.all(color: Colors.red.withOpacity(0.3), width: 2) : null,
           boxShadow: [
             BoxShadow(
-              color: urgent
-                  ? Colors.red.withOpacity(0.1)
-                  : Colors.grey.withOpacity(0.08),
+              color: urgent ? Colors.red.withOpacity(0.1) : Colors.grey.withOpacity(0.08),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -894,64 +702,18 @@ class _CHWDashboardHomeState extends State<CHWDashboardHome> {
                   ),
                   child: Icon(icon, color: color, size: 22),
                 ),
-                if (trend != null)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.green[50],
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      trend,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.green[700],
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
                 if (urgent)
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.red,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: const Text(
-                      "!",
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(6)),
+                    child: const Text("!", style: TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold)),
                   ),
               ],
             ),
             const SizedBox(height: 12),
-            Text(
-              value,
-              style: const TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
-              ),
-            ),
+            Text(value, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.black87)),
             const SizedBox(height: 4),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[600],
-                fontWeight: FontWeight.w500,
-              ),
-            ),
+            Text(title, style: TextStyle(fontSize: 12, color: Colors.grey[600], fontWeight: FontWeight.w500)),
           ],
         ),
       ),
@@ -965,7 +727,6 @@ class _CHWDashboardHomeState extends State<CHWDashboardHome> {
     required IconData icon,
     required Color color,
     required VoidCallback onTap,
-    bool urgent = false,
   }) {
     return InkWell(
       onTap: onTap,
@@ -975,15 +736,8 @@ class _CHWDashboardHomeState extends State<CHWDashboardHome> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
-          border: urgent
-              ? Border.all(color: color.withOpacity(0.3), width: 2)
-              : null,
           boxShadow: [
-            BoxShadow(
-              color: Colors.grey.withOpacity(0.08),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
+            BoxShadow(color: Colors.grey.withOpacity(0.08), blurRadius: 10, offset: const Offset(0, 4)),
           ],
         ),
         child: Row(
@@ -1001,19 +755,9 @@ class _CHWDashboardHomeState extends State<CHWDashboardHome> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
-                  ),
+                  Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87)),
                   const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                  ),
+                  Text(subtitle, style: TextStyle(fontSize: 13, color: Colors.grey[600])),
                 ],
               ),
             ),
@@ -1038,25 +782,16 @@ class _CHWDashboardHomeState extends State<CHWDashboardHome> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: isUrgent
-            ? Border.all(color: Colors.red.withOpacity(0.3), width: 2)
-            : null,
+        border: isUrgent ? Border.all(color: Colors.red.withOpacity(0.3), width: 2) : null,
         boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.08),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
+          BoxShadow(color: Colors.grey.withOpacity(0.08), blurRadius: 10, offset: const Offset(0, 4)),
         ],
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
+            decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
             child: Icon(icon, color: color, size: 22),
           ),
           const SizedBox(width: 16),
@@ -1069,45 +804,24 @@ class _CHWDashboardHomeState extends State<CHWDashboardHome> {
                     Expanded(
                       child: Text(
                         patientName,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black87),
                       ),
                     ),
                     if (isUrgent)
                       Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.red,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(8)),
                         child: const Text(
                           "URGENT",
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.5,
-                          ),
+                          style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.5),
                         ),
                       ),
                   ],
                 ),
                 const SizedBox(height: 6),
-                Text(
-                  message,
-                  style: TextStyle(fontSize: 13, color: Colors.grey[700]),
-                ),
+                Text(message, style: TextStyle(fontSize: 13, color: Colors.grey[700]), maxLines: 2, overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 6),
-                Text(
-                  time,
-                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
-                ),
+                Text(time, style: TextStyle(fontSize: 11, color: Colors.grey[500])),
               ],
             ),
           ),
