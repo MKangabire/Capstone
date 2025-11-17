@@ -44,7 +44,7 @@ except Exception as e:
 
 # Load ML Model
 # Load ML Model
-model_path = os.path.join(os.path.dirname(__file__), 'gdm_model.pkl')
+model_path = os.path.join(os.path.dirname(__file__), 'xgboost_best_model.pkl')
 print(f"Model path: {model_path}")
 print(f"File exists: {os.path.exists(model_path)}")
 if os.path.exists(model_path):
