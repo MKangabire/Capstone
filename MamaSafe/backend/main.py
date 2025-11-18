@@ -351,7 +351,7 @@ async def update_patient(patient_id: str, update_data: PatientUpdate):
             height_m = data_dict['height'] / 100
             data_dict['bmi'] = round(data_dict['weight'] / (height_m ** 2), 2)
         
-        response = supabase.table('patients')\
+        response = supabase.table('profiles')\
             .update(data_dict)\
             .eq('id', patient_id)\
             .execute()
