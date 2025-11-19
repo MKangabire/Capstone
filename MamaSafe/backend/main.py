@@ -42,7 +42,48 @@ try:
 except Exception as e:
     print(f"❌ Supabase initialization failed: {e}")
     supabase = None
+BASE_DIR = Path(__file__).resolve().parent
+model_path = BASE_DIR / 'xgboost_best_model.pkl'
 
+print(f"🔍 Python version: {os.sys.version}")
+print(f"🔍 Current working directory: {os.getcwd()}")
+print(f"🔍 Script location: {__file__}")
+print(f"🔍 BASE_DIR: {BASE_DIR}")
+print(f"🔍 Model path: {model_path}")
+print(f"🔍 Model file exists: {model_path.exists()}")
+
+# List all files in the directory
+try:
+    files = list(BASE_DIR.iterdir())
+    print(f"🔍 Files in BASE_DIR ({len(files)} files):")
+    for f in files:
+        print(f"   - {f.name} ({'file' if f.is_file() else 'dir'})")
+except Exception as e:
+    print(f"❌ Could not list files: {e}")
+
+# Actually load the model - THIS WAS MISSING!
+model = None
+try:
+    if model_path.exists():
+        model = joblib.load(str(model_path))
+        print("✅ Model loaded successfully!")
+        print(f"   Model type: {type(model)}")
+        print(f"   Model classes: {getattr(model, 'classes_', 'N/A')}")
+    else:
+        print("❌ Model file not found at expected path!")
+        # Try alternative path (current working directory)
+        alt_path = Path(os.getcwd()) / 'xgboost_best_model.pkl'
+        print(f"🔍 Trying alternative path: {alt_path}")
+        if alt_path.exists():
+            model = joblib.load(str(alt_path))
+            print("✅ Model loaded from alternative path!")
+        else:
+            print("❌ Model not found in alternative path either!")
+except Exception as e:
+    print(f"❌ MODEL LOAD FAILED: {e}")
+    print(f"   ERROR TYPE: {type(e).__name__}")
+    import traceback
+    print(traceback.format_exc())
 # Load ML Model
 # Load ML Model
 # model_path = os.path.join(os.path.dirname(__file__), 'xgboost_best_model.pkl')
@@ -64,15 +105,15 @@ except Exception as e:
 #     import traceback
 #     print(traceback.format_exc())
 #     model = None
-BASE_DIR = Path(__file__).resolve().parent
-model_path = BASE_DIR / 'xgboost_best_model.pkl'
+# BASE_DIR = Path(__file__).resolve().parent
+# model_path = BASE_DIR / 'xgboost_best_model.pkl'
 
-print(f"🔍 Python version: {os.sys.version}")
-print(f"🔍 Current working directory: {os.getcwd()}")
-print(f"🔍 Script location: {__file__}")
-print(f"🔍 BASE_DIR: {BASE_DIR}")
-print(f"🔍 Model path: {model_path}")
-print(f"🔍 Model file exists: {model_path.exists()}")
+# print(f"🔍 Python version: {os.sys.version}")
+# print(f"🔍 Current working directory: {os.getcwd()}")
+# print(f"🔍 Script location: {__file__}")
+# print(f"🔍 BASE_DIR: {BASE_DIR}")
+# print(f"🔍 Model path: {model_path}")
+# print(f"🔍 Model file exists: {model_path.exists()}")
 # ==================== PYDANTIC MODELS ====================
 
 class PredictionInput(BaseModel):
