@@ -9,6 +9,7 @@ from supabase import create_client, Client
 from dotenv import load_dotenv
 import traceback
 from datetime import datetime
+from pathlib import Path
 
 app = FastAPI(title="MamaSafe GDM Prediction API", version="1.0.0")
 
@@ -44,26 +45,34 @@ except Exception as e:
 
 # Load ML Model
 # Load ML Model
-model_path = os.path.join(os.path.dirname(__file__), 'xgboost_best_model.pkl')
-print(f"Model path: {model_path}")
-print(f"File exists: {os.path.exists(model_path)}")
-if os.path.exists(model_path):
-    print(f"File size: {os.path.getsize(model_path)} bytes")
-else:
-    print("MODEL FILE MISSING!")
+# model_path = os.path.join(os.path.dirname(__file__), 'xgboost_best_model.pkl')
+# print(f"Model path: {model_path}")
+# print(f"File exists: {os.path.exists(model_path)}")
+# if os.path.exists(model_path):
+#     print(f"File size: {os.path.getsize(model_path)} bytes")
+# else:
+#     print("MODEL FILE MISSING!")
 
-try:
-    model = joblib.load(model_path)
-    print("Model loaded successfully!")
-    print(f"Model type: {type(model)}")
-    print(f"Model classes: {getattr(model, 'classes_', 'N/A')}")
-except Exception as e:
-    print(f"MODEL LOAD FAILED: {e}")
-    print(f"ERROR TYPE: {type(e).__name__}")
-    import traceback
-    print(traceback.format_exc())
-    model = None
+# try:
+#     model = joblib.load(model_path)
+#     print("Model loaded successfully!")
+#     print(f"Model type: {type(model)}")
+#     print(f"Model classes: {getattr(model, 'classes_', 'N/A')}")
+# except Exception as e:
+#     print(f"MODEL LOAD FAILED: {e}")
+#     print(f"ERROR TYPE: {type(e).__name__}")
+#     import traceback
+#     print(traceback.format_exc())
+#     model = None
+BASE_DIR = Path(__file__).resolve().parent
+model_path = BASE_DIR / 'xgboost_best_model.pkl'
 
+print(f"🔍 Python version: {os.sys.version}")
+print(f"🔍 Current working directory: {os.getcwd()}")
+print(f"🔍 Script location: {__file__}")
+print(f"🔍 BASE_DIR: {BASE_DIR}")
+print(f"🔍 Model path: {model_path}")
+print(f"🔍 Model file exists: {model_path.exists()}")
 # ==================== PYDANTIC MODELS ====================
 
 class PredictionInput(BaseModel):
