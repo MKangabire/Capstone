@@ -1,6 +1,5 @@
 annotated-types==0.7.0
 anyio==3.7.1
-backports.asyncio.runner==1.2.0
 bidict==0.23.1
 black==23.11.0
 blinker==1.9.0
@@ -71,7 +70,6 @@ python-dotenv==1.0.0
 python-engineio==4.12.3
 python-multipart==0.0.6
 python-socketio==5.14.3
-pywin32==311
 pyzmq==27.1.0
 realtime==2.24.0
 requests==2.32.4
