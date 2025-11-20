@@ -220,7 +220,6 @@ class _PredictionInputScreenState extends State<PredictionInputScreen> {
             'message': data['message'] ?? 'Prediction completed',
             'risk_level': data['risk_level'] ?? 'Unknown',
             'risk_percentage': data['risk_percentage'] ?? 0,
-            'confidence': data['confidence'] ?? 0,
             'recommendations': data['recommendations'] ?? '',
             'risk_factors': data['risk_factors'] ?? '',
           };
@@ -680,12 +679,7 @@ class _PredictionInputScreenState extends State<PredictionInputScreen> {
                               Colors.orange,
                             ),
 
-                            _buildResultRow(
-                              'Confidence',
-                              '${_predictionResult!['confidence']}%',
-                              Icons.percent,
-                              Colors.blue,
-                            ),
+                            
 
                             // Risk Factors
                             if (_predictionResult!['risk_factors'] != null && _predictionResult!['risk_factors'].toString().isNotEmpty) ...[

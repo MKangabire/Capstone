@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:mama_safe/services/auth_service.dart';
 import 'package:mama_safe/screens/login_screen.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -19,9 +21,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _isLoading = false;
+  bool _acceptedTerms = false; // ✅ NEW: Terms acceptance state
 
   final AuthService _authService = AuthService();
 
+  // ✅ NEW: Your Google Docs Terms & Conditions URL
+  // Replace this with your actual Google Docs link
+  final String _termsAndConditionsUrl = 'https://docs.google.com/document/d/1CsSJ7HfFKQ96RIVu3HKoKettm96QJQNNEeRgJbVUXY8/edit?usp=sharing';
+  
   @override
   void dispose() {
     _emailController.dispose();
@@ -32,8 +39,59 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
+  // ✅ NEW: Function to open Terms & Conditions in browser
+  Future<void> _openTermsAndConditions() async {
+    final Uri url = Uri.parse(_termsAndConditionsUrl);
+    
+    try {
+      if (await canLaunchUrl(url)) {
+        await launchUrl(
+          url,
+          mode: LaunchMode.externalApplication, // Opens in browser
+        );
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Could not open Terms & Conditions'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error opening link: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   void _handleRegister() async {
     if (_formKey.currentState!.validate()) {
+      // ✅ NEW: Check if terms are accepted
+      if (!_acceptedTerms) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: Colors.white),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text('Please accept the Terms & Conditions to continue'),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
       if (_passwordController.text != _confirmPasswordController.text) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -51,7 +109,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         password: _passwordController.text,
         fullName: _fullNameController.text.trim(),
         phone: _phoneController.text.trim(),
-        role: 'patient', // Always patient for this screen
+        role: 'patient',
       );
       
       setState(() => _isLoading = false);
@@ -283,20 +341,91 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               return null;
                             },
                           ),
+                          const SizedBox(height: 24),
+                          
+                          // ✅ NEW: Terms & Conditions Checkbox
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: _acceptedTerms ? Colors.green[50] : Colors.grey[50],
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: _acceptedTerms ? Colors.green[300]! : Colors.grey[300]!,
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Checkbox(
+                                  value: _acceptedTerms,
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _acceptedTerms = value ?? false;
+                                    });
+                                  },
+                                  activeColor: Colors.pink[400],
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(top: 12, left: 8),
+                                    child: RichText(
+                                      text: TextSpan(
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: Colors.grey[700],
+                                          height: 1.5,
+                                        ),
+                                        children: [
+                                          const TextSpan(text: 'I agree to the '),
+                                          TextSpan(
+                                            text: 'Terms & Conditions',
+                                            style: TextStyle(
+                                              color: Colors.pink[400],
+                                              fontWeight: FontWeight.bold,
+                                              decoration: TextDecoration.underline,
+                                            ),
+                                            recognizer: TapGestureRecognizer()
+                                              ..onTap = _openTermsAndConditions,
+                                          ),
+                                          const TextSpan(text: ' and '),
+                                          TextSpan(
+                                            text: 'Privacy Policy',
+                                            style: TextStyle(
+                                              color: Colors.pink[400],
+                                              fontWeight: FontWeight.bold,
+                                              decoration: TextDecoration.underline,
+                                            ),
+                                            recognizer: TapGestureRecognizer()
+                                              ..onTap = _openTermsAndConditions,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                           const SizedBox(height: 28),
                           
-                          // Register Button
+                          // Register Button (disabled if terms not accepted)
                           SizedBox(
                             height: 56,
                             child: ElevatedButton(
-                              onPressed: _isLoading ? null : _handleRegister,
+                              onPressed: (_isLoading || !_acceptedTerms) ? null : _handleRegister,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.pink[400],
+                                backgroundColor: _acceptedTerms ? Colors.pink[400] : Colors.grey[400],
                                 foregroundColor: Colors.white,
                                 elevation: 0,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(14),
                                 ),
+                                disabledBackgroundColor: Colors.grey[300],
+                                disabledForegroundColor: Colors.grey[600],
                               ),
                               child: _isLoading
                                   ? const SizedBox(
@@ -307,15 +436,39 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                         valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                       ),
                                     )
-                                  : const Text(
-                                      'Register',
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w600,
-                                      ),
+                                  : Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        const Text(
+                                          'Register',
+                                          style: TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        if (!_acceptedTerms) ...[
+                                          const SizedBox(width: 8),
+                                          const Icon(Icons.lock_outline, size: 18),
+                                        ],
+                                      ],
                                     ),
                             ),
                           ),
+                          
+                          if (!_acceptedTerms) ...[
+                            const SizedBox(height: 12),
+                            Center(
+                              child: Text(
+                                'Accept terms to enable registration',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[600],
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            ),
+                          ],
+                          
                           const SizedBox(height: 20),
                           
                           // Login Link

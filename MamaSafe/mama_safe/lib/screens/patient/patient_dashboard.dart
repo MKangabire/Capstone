@@ -7,6 +7,10 @@ import 'package:mama_safe/screens/patient/prediction_input_screen.dart.dart';
 import 'package:mama_safe/screens/patient/patient_history.dart';
 import 'package:mama_safe/screens/patient/profile_completion_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:csv/csv.dart';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 class PatientDashboard extends StatefulWidget {
   const PatientDashboard({super.key});
@@ -23,7 +27,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
 
   final AuthService _authService = AuthService();
   final String _apiBaseUrl = 'https://capstone-kubh.onrender.com';
-  final SupabaseClient _supabase = Supabase.instance.client; // ✅ FIXED: SUPABASE CLIENT
+  final SupabaseClient _supabase = Supabase.instance.client;
 
   @override
   void initState() {
@@ -40,7 +44,6 @@ class _PatientDashboardState extends State<PatientDashboard> {
 
       final userId = _authService.currentUser?.id;
       if (userId != null) {
-        // Fetch from API
         try {
           final profileResponse = await http.get(
             Uri.parse('$_apiBaseUrl/api/patients/$userId'),
@@ -62,7 +65,6 @@ class _PatientDashboardState extends State<PatientDashboard> {
           print('⚠️ API fetch failed (using Supabase data only): $apiError');
         }
 
-        // ✅ FIXED: Fetch CHW details using _supabase
         try {
           final chwId = _profile['chw_id'];
           if (chwId != null) {
@@ -127,6 +129,182 @@ class _PatientDashboardState extends State<PatientDashboard> {
       }
     } catch (e) {
       print('❌ Predictions error: $e');
+    }
+  }
+
+  Future<void> _clearHistory() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange),
+            SizedBox(width: 12),
+            Text('Clear History'),
+          ],
+        ),
+        content: const Text(
+          'Are you sure you want to delete all your prediction history? This action cannot be undone.',
+          style: TextStyle(fontSize: 15),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete All'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      final userId = _authService.currentUser?.id;
+      if (userId == null) return;
+
+      // Delete all predictions for this patient from Supabase
+      await _supabase
+          .from('predictions')
+          .delete()
+          .eq('patient_id', userId);
+
+      if (mounted) {
+        setState(() {
+          _predictions = [];
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white),
+                SizedBox(width: 12),
+                Text('All predictions deleted successfully'),
+              ],
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      print('❌ Clear history error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error, color: Colors.white),
+                const SizedBox(width: 12),
+                Expanded(child: Text('Failed to clear history: ${e.toString()}')),
+              ],
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _exportToCSV() async {
+  if (_predictions.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.info, color: Colors.white),
+            SizedBox(width: 12),
+            Text('No predictions to export'),
+          ],
+        ),
+        backgroundColor: Colors.orange,
+      ),
+    );
+    return;
+  }
+
+  try {
+    // Prepare CSV data
+    List<List<dynamic>> rows = [];
+    
+    // Add header row
+    rows.add([
+      'Date',
+      'Risk Level',
+      'Risk Percentage',
+      'Confidence',
+      'Risk Factors',
+      'Recommendations',
+    ]);
+
+    // Add data rows
+    for (var prediction in _predictions) {
+      rows.add([
+        _formatDate(prediction['created_at']?.toString()),
+        prediction['risk_level'] ?? 'Unknown',
+        '${prediction['risk_percentage'] ?? 0}%',
+        '${prediction['confidence'] ?? 0}%',
+        prediction['factors']?.toString().replaceAll('\n', ' | ') ?? '',
+        prediction['recommendations']?.toString().replaceAll('\n', ' | ') ?? '',
+      ]);
+    }
+
+      // Convert to CSV string
+      String csv = const ListToCsvConverter().convert(rows);
+
+      // Use getApplicationDocumentsDirectory instead
+      final directory = await getApplicationDocumentsDirectory();
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final path = '${directory.path}/mamasafe_predictions_$timestamp.csv';
+      
+      // Write to file
+      final file = File(path);
+      await file.writeAsString(csv);
+
+      // Share the file
+      await Share.shareXFiles(
+        [XFile(path)],
+        subject: 'MamaSafe GDM Predictions Export',
+        text: 'My GDM risk assessment history from MamaSafe',
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white),
+                SizedBox(width: 12),
+                Text('Predictions exported successfully'),
+              ],
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      print('❌ Export error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error, color: Colors.white),
+                const SizedBox(width: 12),
+                Expanded(child: Text('Export failed: ${e.toString()}')),
+              ],
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -195,7 +373,28 @@ class _PatientDashboardState extends State<PatientDashboard> {
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
-          if (_selectedIndex == 0)
+          if (_selectedIndex == 0 && _predictions.isNotEmpty) ...[
+            // Export to CSV button
+            IconButton(
+              icon: const Icon(Icons.download),
+              tooltip: 'Export to CSV',
+              onPressed: _exportToCSV,
+            ),
+            // Clear history button
+            IconButton(
+              icon: const Icon(Icons.delete_sweep),
+              tooltip: 'Clear History',
+              onPressed: _clearHistory,
+            ),
+            // Refresh button
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: () {
+                _fetchProfile();
+                _fetchPredictions();
+              },
+            ),
+          ] else if (_selectedIndex == 0)
             IconButton(
               icon: const Icon(Icons.refresh),
               onPressed: () {
@@ -379,6 +578,28 @@ class _PatientDashboardState extends State<PatientDashboard> {
                           Icons.history,
                           Colors.blue,
                           () => setState(() => _selectedIndex = 1),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildQuickAction(
+                          'Export CSV',
+                          Icons.download,
+                          Colors.green,
+                          _exportToCSV,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _buildQuickAction(
+                          'Clear History',
+                          Icons.delete_sweep,
+                          Colors.red,
+                          _clearHistory,
                         ),
                       ),
                     ],
@@ -674,7 +895,6 @@ class _PatientDashboardState extends State<PatientDashboard> {
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
-          // Profile Header with Avatar
           Container(
             padding: const EdgeInsets.all(28),
             decoration: BoxDecoration(
