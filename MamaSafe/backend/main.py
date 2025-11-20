@@ -214,7 +214,11 @@ async def create_prediction(input_data: PredictionInput):
         print(f"🎯 Prediction: {prediction[0]}, Probability: {probability}")
         
         # Determine risk level
-        is_high_risk = bool(prediction[0])
+        prediction_value = int(prediction[0])
+    
+    
+        is_high_risk = bool(1 - prediction_value) 
+        probability = probabilities[1 - prediction_value]
         risk_level = "High" if is_high_risk else "Low"
         risk_percentage = float(probability * 100)
         confidence = float(probability * 100)
