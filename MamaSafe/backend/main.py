@@ -217,7 +217,7 @@ async def create_prediction(input_data: PredictionInput):
         prediction_value = int(prediction[0])
     
     
-        is_high_risk = bool(1 - prediction_value) 
+        is_high_risk = prediction_value == 1
         probability = probabilities[1 - prediction_value]
         risk_level = "High" if is_high_risk else "Low"
         risk_percentage = float(probability * 100)
