@@ -202,27 +202,16 @@ def calculate_gdm_risk(input_data: PredictionInput) -> dict:
     # Cap risk score at 100
     risk_score = min(risk_score, 100)
     
-    # === DETERMINE RISK LEVEL ===
-    if risk_score >= 70:
-        risk_level = "Critical"
-        is_high_risk = True
-        confidence = 95
-    elif risk_score >= 50:
+    # === DETERMINE RISK LEVEL (DATABASE ONLY ACCEPTS "High" or "Low") ===
+    if risk_score >= 30:
         risk_level = "High"
         is_high_risk = True
-        confidence = 85
-    elif risk_score >= 30:
-        risk_level = "Moderate"
-        is_high_risk = True
-        confidence = 70
-    elif risk_score >= 15:
-        risk_level = "Low-Moderate"
-        is_high_risk = False
-        confidence = 60
+        # Confidence increases with risk score
+        confidence = min(95, 70 + (risk_score - 30))
     else:
         risk_level = "Low"
         is_high_risk = False
-        confidence = 55
+        confidence = max(55, 90 - risk_score * 2)
     
     if not risk_factors:
         risk_factors.append("✅ No significant risk factors detected - All values within normal range")
