@@ -41,35 +41,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   // ✅ NEW: Function to open Terms & Conditions in browser
   Future<void> _openTermsAndConditions() async {
-    final Uri url = Uri.parse(_termsAndConditionsUrl);
-    
-    try {
-      if (await canLaunchUrl(url)) {
-        await launchUrl(
-          url,
-          mode: LaunchMode.externalApplication, // Opens in browser
-        );
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Could not open Terms & Conditions'),
-              backgroundColor: Colors.orange,
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error opening link: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
+  final Uri url = Uri.parse(_termsAndConditionsUrl);
+
+  if (!await launchUrl(
+    url,
+    mode: LaunchMode.externalApplication,
+  )) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Could not open Terms & Conditions'),
+        backgroundColor: Colors.red,
+      ),
+    );
   }
+}
+
 
   void _handleRegister() async {
     if (_formKey.currentState!.validate()) {

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:mama_safe/services/auth_service.dart';
-import 'package:mama_safe/screens/chw/chw_login_screen.dart';
 
 class AdminRegisterCHW extends StatefulWidget {
   const AdminRegisterCHW({super.key});
@@ -64,10 +63,7 @@ class _AdminRegisterCHWState extends State<AdminRegisterCHW> {
             backgroundColor: Colors.green,
           ),
         );
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const CHWLoginScreen()),
-        );
+       
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -269,33 +265,7 @@ class _AdminRegisterCHWState extends State<AdminRegisterCHW> {
                         : const Text("Register CHW"),
                   ),
                 ),
-                const SizedBox(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      "Already have a CHW account? ",
-                      style: TextStyle(color: Colors.grey[600]),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const CHWLoginScreen(),
-                          ),
-                        );
-                      },
-                      child: Text(
-                        "Login",
-                        style: TextStyle(
-                          color: Colors.blue[700],
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                
               ],
             ),
           ),

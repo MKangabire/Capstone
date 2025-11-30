@@ -596,7 +596,7 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
     final hasValue = value != null;
     
     return DropdownButtonFormField<String>(
-      value: value,
+      initialValue: value,
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon, color: Colors.pink[400]),

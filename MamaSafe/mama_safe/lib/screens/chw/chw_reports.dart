@@ -79,33 +79,7 @@ class _CHWReportsState extends State<CHWReports> {
         mediumRiskPatients = totalPatients - highRiskPatients - lowRiskPatients;
       }
 
-      // Get visits data (if appointments table exists)
-      try {
-        final visitsResponse = await _supabase
-            .from('appointments')
-            .select('id, status, scheduled_date')
-            .eq('chw_id', chwId);
-        
-        visitsCompleted = visitsResponse
-            .where((v) => v['status'] == 'completed')
-            .length;
-        
-        visitsPending = visitsResponse
-            .where((v) => v['status'] == 'pending')
-            .length;
-        
-        // Calculate compliance rate
-        final totalVisits = visitsCompleted + visitsPending;
-        if (totalVisits > 0) {
-          complianceRate = (visitsCompleted / totalVisits * 100);
-        }
-      } catch (e) {
-        print('ℹ️ Appointments table not available: $e');
-        visitsCompleted = 0;
-        visitsPending = 0;
-        complianceRate = 0;
-      }
-
+      
       // Get recent activities from notifications
       try {
         final activitiesResponse = await _supabase
@@ -247,7 +221,7 @@ class _CHWReportsState extends State<CHWReports> {
                                   period,
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
-                                    fontSize: 13,
+                                    fontSize: 12,
                                     fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                                     color: isSelected ? Colors.blue[700] : Colors.grey[700],
                                   ),
@@ -271,9 +245,9 @@ class _CHWReportsState extends State<CHWReports> {
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       crossAxisCount: 2,
-                      crossAxisSpacing: 16,
-                      mainAxisSpacing: 16,
-                      childAspectRatio: 1.2,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                      childAspectRatio: 1.3,
                       children: [
                         _buildSummaryCard(
                           "Total Patients",
@@ -294,14 +268,14 @@ class _CHWReportsState extends State<CHWReports> {
                           visitsCompleted.toString(),
                           Icons.check_circle,
                           Colors.green,
-                          "Out of ${visitsCompleted + visitsPending}",
+                          "Of ${visitsCompleted + visitsPending}",
                         ),
                         _buildSummaryCard(
                           "Compliance",
                           "${complianceRate.toStringAsFixed(0)}%",
                           Icons.trending_up,
                           Colors.purple,
-                          "Visit completion rate",
+                          "Completion rate",
                         ),
                       ],
                     ),
@@ -444,7 +418,7 @@ class _CHWReportsState extends State<CHWReports> {
     String subtitle,
   ) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(15),
@@ -459,33 +433,50 @@ class _CHWReportsState extends State<CHWReports> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
               color: color.withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(icon, color: color, size: 24),
+            child: Icon(icon, color: color, size: 20),
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                value,
-                style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                title,
-                style: TextStyle(fontSize: 13, color: Colors.grey[600], fontWeight: FontWeight.w500),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                style: TextStyle(fontSize: 11, color: Colors.grey[500]),
-              ),
-            ],
+          const SizedBox(height: 8),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    value,
+                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[600],
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -514,7 +505,15 @@ class _CHWReportsState extends State<CHWReports> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
               Text(
                 "$current/$total ($percentage%)",
                 style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: color),
@@ -609,13 +608,27 @@ class _CHWReportsState extends State<CHWReports> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                Text(
+                  title,
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 const SizedBox(height: 4),
-                Text(subtitle, style: TextStyle(fontSize: 13, color: Colors.grey[600])),
+                Text(
+                  subtitle,
+                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ],
             ),
           ),
-          Text(time, style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+          const SizedBox(width: 8),
+          Text(
+            time,
+            style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+          ),
         ],
       ),
     );

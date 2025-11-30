@@ -1,9 +1,13 @@
 // lib/main.dart
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:mama_safe/services/supabase_service.dart';
-import 'package:mama_safe/screens/splash_screen.dart'; // Add this import
+import 'package:mama_safe/screens/splash_screen.dart';
 import 'package:mama_safe/screens/setup_admin_screen.dart';
+import 'package:mama_safe/screens/login_screen.dart';
+import 'package:mama_safe/screens/patient/patient_dashboard.dart';
+import 'package:mama_safe/screens/chw/chw_dashboard.dart';
+import 'package:mama_safe/screens/admin/admin_dashboard.dart';
+import 'package:mama_safe/screens/patient/profile_completion_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,10 +21,23 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      home: const SplashScreen(), // This will now use the one from screens/splash_screen.dart
+      title: 'MamaSafe',
       debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.pink),
+        useMaterial3: true,
+      ),
+      // Start with splash screen (which will handle auth checking)
+      home: const SplashScreen(),
+      // Define named routes for easy navigation
+      routes: {
+        '/login': (context) => const LoginScreen(),
+        '/patient-dashboard': (context) => const PatientDashboard(),
+        '/chw-dashboard': (context) => const CHWDashboard(),
+        '/admin-dashboard': (context) => const AdminDashboard(),
+        '/profile-completion': (context) => const ProfileCompletionScreen(),
+        '/setup-admin': (context) => const SetupAdminScreen(),
+      },
     );
   }
 }
-
-// DELETE the entire SplashScreen class that's currently here (lines 23-202)

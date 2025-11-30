@@ -11,6 +11,8 @@ import 'package:csv/csv.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:mama_safe/utils/call_helper.dart'; // Import CallHelper
+import 'package:mama_safe/screens/login_screen.dart';
 
 class PatientDashboard extends StatefulWidget {
   const PatientDashboard({super.key});
@@ -45,15 +47,17 @@ class _PatientDashboardState extends State<PatientDashboard> {
       final userId = _authService.currentUser?.id;
       if (userId != null) {
         try {
-          final profileResponse = await http.get(
-            Uri.parse('$_apiBaseUrl/api/patients/$userId'),
-            headers: {'Content-Type': 'application/json'},
-          ).timeout(const Duration(seconds: 5));
+          final profileResponse = await http
+              .get(
+                Uri.parse('$_apiBaseUrl/api/patients/$userId'),
+                headers: {'Content-Type': 'application/json'},
+              )
+              .timeout(const Duration(seconds: 5));
 
           if (profileResponse.statusCode == 200) {
             final data = json.decode(profileResponse.body);
             final apiProfile = data['patient'] ?? {};
-            
+
             if (mounted) {
               setState(() {
                 _profile = {...apiProfile, ..._profile};
@@ -69,7 +73,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
           final chwId = _profile['chw_id'];
           if (chwId != null) {
             print('🔍 Fetching CHW details for ID: $chwId');
-            
+
             final chwResponse = await _supabase
                 .from('profiles')
                 .select('full_name, phone, email, region')
@@ -90,7 +94,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
           print('⚠️ CHW fetch failed: $chwError');
         }
       }
-      
+
       if (mounted) setState(() {});
     } catch (e) {
       print('❌ Profile error: $e');
@@ -120,7 +124,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final predictionsList = data['predictions'] ?? [];
-        
+
         if (mounted) {
           setState(() {
             _predictions = List<Map<String, dynamic>>.from(predictionsList);
@@ -129,6 +133,29 @@ class _PatientDashboardState extends State<PatientDashboard> {
       }
     } catch (e) {
       print('❌ Predictions error: $e');
+    }
+  }
+
+  // Method to call CHW
+  void _callCHW() {
+    final chwPhone = _profile['chw']?['phone'];
+    final chwName = _profile['chw']?['full_name'] ?? 'your CHW';
+
+    if (chwPhone != null && chwPhone.toString().isNotEmpty) {
+      CallHelper.makePhoneCall(context, chwPhone.toString());
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.error, color: Colors.white),
+              const SizedBox(width: 12),
+              Expanded(child: Text('Phone number not available for $chwName')),
+            ],
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
     }
   }
 
@@ -171,10 +198,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
       if (userId == null) return;
 
       // Delete all predictions for this patient from Supabase
-      await _supabase
-          .from('predictions')
-          .delete()
-          .eq('patient_id', userId);
+      await _supabase.from('predictions').delete().eq('patient_id', userId);
 
       if (mounted) {
         setState(() {
@@ -203,7 +227,9 @@ class _PatientDashboardState extends State<PatientDashboard> {
               children: [
                 const Icon(Icons.error, color: Colors.white),
                 const SizedBox(width: 12),
-                Expanded(child: Text('Failed to clear history: ${e.toString()}')),
+                Expanded(
+                  child: Text('Failed to clear history: ${e.toString()}'),
+                ),
               ],
             ),
             backgroundColor: Colors.red,
@@ -214,47 +240,48 @@ class _PatientDashboardState extends State<PatientDashboard> {
   }
 
   Future<void> _exportToCSV() async {
-  if (_predictions.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Row(
-          children: [
-            Icon(Icons.info, color: Colors.white),
-            SizedBox(width: 12),
-            Text('No predictions to export'),
-          ],
+    if (_predictions.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.info, color: Colors.white),
+              SizedBox(width: 12),
+              Text('No predictions to export'),
+            ],
+          ),
+          backgroundColor: Colors.orange,
         ),
-        backgroundColor: Colors.orange,
-      ),
-    );
-    return;
-  }
-
-  try {
-    // Prepare CSV data
-    List<List<dynamic>> rows = [];
-    
-    // Add header row
-    rows.add([
-      'Date',
-      'Risk Level',
-      'Risk Percentage',
-      'Confidence',
-      'Risk Factors',
-      'Recommendations',
-    ]);
-
-    // Add data rows
-    for (var prediction in _predictions) {
-      rows.add([
-        _formatDate(prediction['created_at']?.toString()),
-        prediction['risk_level'] ?? 'Unknown',
-        '${prediction['risk_percentage'] ?? 0}%',
-        '${prediction['confidence'] ?? 0}%',
-        prediction['factors']?.toString().replaceAll('\n', ' | ') ?? '',
-        prediction['recommendations']?.toString().replaceAll('\n', ' | ') ?? '',
-      ]);
+      );
+      return;
     }
+
+    try {
+      // Prepare CSV data
+      List<List<dynamic>> rows = [];
+
+      // Add header row
+      rows.add([
+        'Date',
+        'Risk Level',
+        'Risk Percentage',
+        'Confidence',
+        'Risk Factors',
+        'Recommendations',
+      ]);
+
+      // Add data rows
+      for (var prediction in _predictions) {
+        rows.add([
+          _formatDate(prediction['created_at']?.toString()),
+          prediction['risk_level'] ?? 'Unknown',
+          '${prediction['risk_percentage'] ?? 0}%',
+          '${prediction['confidence'] ?? 0}%',
+          prediction['factors']?.toString().replaceAll('\n', ' | ') ?? '',
+          prediction['recommendations']?.toString().replaceAll('\n', ' | ') ??
+              '',
+        ]);
+      }
 
       // Convert to CSV string
       String csv = const ListToCsvConverter().convert(rows);
@@ -263,7 +290,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
       final directory = await getApplicationDocumentsDirectory();
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final path = '${directory.path}/mamasafe_predictions_$timestamp.csv';
-      
+
       // Write to file
       final file = File(path);
       await file.writeAsString(csv);
@@ -325,12 +352,18 @@ class _PatientDashboardState extends State<PatientDashboard> {
     if (riskLevel == null) return Colors.grey;
     final risk = riskLevel.toLowerCase();
     if (risk.contains('high')) return Colors.red;
-    if (risk.contains('medium') || risk.contains('moderate')) return Colors.orange;
+    if (risk.contains('medium') || risk.contains('moderate'))
+      return Colors.orange;
     if (risk.contains('low')) return Colors.green;
     return Colors.grey;
   }
 
-  Widget _buildStatCard(String label, String value, IconData icon, Color color) {
+  Widget _buildStatCard(
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -349,12 +382,13 @@ class _PatientDashboardState extends State<PatientDashboard> {
           const SizedBox(height: 8),
           Text(
             value,
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color),
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
           ),
-          Text(
-            label,
-            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-          ),
+          Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
         ],
       ),
     );
@@ -366,7 +400,11 @@ class _PatientDashboardState extends State<PatientDashboard> {
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         title: Text(
-          _selectedIndex == 0 ? 'Dashboard' : _selectedIndex == 1 ? 'History' : 'Profile',
+          _selectedIndex == 0
+              ? 'Dashboard'
+              : _selectedIndex == 1
+              ? 'History'
+              : 'Profile',
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
         backgroundColor: Colors.pink[400],
@@ -407,14 +445,17 @@ class _PatientDashboardState extends State<PatientDashboard> {
       body: _selectedIndex == 0
           ? _buildDashboardView()
           : _selectedIndex == 1
-              ? const PatientHistory()
-              : _buildProfileView(),
+          ? const PatientHistory()
+          : _buildProfileView(),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: _onNavItemTapped,
         selectedItemColor: Colors.pink[400],
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Dashboard'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.dashboard),
+            label: 'Dashboard',
+          ),
           BottomNavigationBarItem(icon: Icon(Icons.history), label: 'History'),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
         ],
@@ -424,7 +465,9 @@ class _PatientDashboardState extends State<PatientDashboard> {
               onPressed: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const PredictionInputScreen()),
+                  MaterialPageRoute(
+                    builder: (context) => const PredictionInputScreen(),
+                  ),
                 ).then((_) => _fetchPredictions());
               },
               backgroundColor: Colors.pink[400],
@@ -436,7 +479,9 @@ class _PatientDashboardState extends State<PatientDashboard> {
   }
 
   Widget _buildDashboardView() {
-    final latestPrediction = _predictions.isNotEmpty ? _predictions.first : null;
+    final latestPrediction = _predictions.isNotEmpty
+        ? _predictions.first
+        : null;
 
     return _isLoading
         ? const Center(child: CircularProgressIndicator())
@@ -476,7 +521,11 @@ class _PatientDashboardState extends State<PatientDashboard> {
                             color: Colors.white.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: const Icon(Icons.person, color: Colors.white, size: 28),
+                          child: const Icon(
+                            Icons.person,
+                            color: Colors.white,
+                            size: 28,
+                          ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -565,7 +614,8 @@ class _PatientDashboardState extends State<PatientDashboard> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => const PredictionInputScreen(),
+                                builder: (context) =>
+                                    const PredictionInputScreen(),
                               ),
                             ).then((_) => _fetchPredictions());
                           },
@@ -610,7 +660,10 @@ class _PatientDashboardState extends State<PatientDashboard> {
                       children: [
                         const Text(
                           'Latest Assessment',
-                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         const Spacer(),
                         Container(
@@ -621,11 +674,17 @@ class _PatientDashboardState extends State<PatientDashboard> {
                           decoration: BoxDecoration(
                             color: Colors.green.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+                            border: Border.all(
+                              color: Colors.green.withValues(alpha: 0.3),
+                            ),
                           ),
                           child: const Row(
                             children: [
-                              Icon(Icons.fiber_new, color: Colors.green, size: 16),
+                              Icon(
+                                Icons.fiber_new,
+                                color: Colors.green,
+                                size: 16,
+                              ),
                               SizedBox(width: 4),
                               Text(
                                 'Recent',
@@ -648,7 +707,10 @@ class _PatientDashboardState extends State<PatientDashboard> {
                     children: [
                       const Text(
                         'Assessment History',
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       const Spacer(),
                       Text(
@@ -663,7 +725,9 @@ class _PatientDashboardState extends State<PatientDashboard> {
                       : ListView.builder(
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
-                          itemCount: _predictions.length > 3 ? 3 : _predictions.length,
+                          itemCount: _predictions.length > 3
+                              ? 3
+                              : _predictions.length,
                           itemBuilder: (context, index) =>
                               _buildPredictionCard(_predictions[index]),
                         ),
@@ -758,7 +822,9 @@ class _PatientDashboardState extends State<PatientDashboard> {
               color: riskColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Center(child: Text(riskEmoji, style: const TextStyle(fontSize: 24))),
+            child: Center(
+              child: Text(riskEmoji, style: const TextStyle(fontSize: 24)),
+            ),
           ),
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -804,11 +870,18 @@ class _PatientDashboardState extends State<PatientDashboard> {
                   if (factors != null && factors.toString().isNotEmpty) ...[
                     Row(
                       children: [
-                        Icon(Icons.warning_amber_rounded, color: Colors.orange[700], size: 20),
+                        Icon(
+                          Icons.warning_amber_rounded,
+                          color: Colors.orange[700],
+                          size: 20,
+                        ),
                         const SizedBox(width: 8),
                         const Text(
                           'Risk Factors',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ],
                     ),
@@ -822,19 +895,31 @@ class _PatientDashboardState extends State<PatientDashboard> {
                       ),
                       child: Text(
                         factors.toString(),
-                        style: TextStyle(fontSize: 14, color: Colors.grey[800], height: 1.5),
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[800],
+                          height: 1.5,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 16),
                   ],
-                  if (recommendations != null && recommendations.toString().isNotEmpty) ...[
+                  if (recommendations != null &&
+                      recommendations.toString().isNotEmpty) ...[
                     Row(
                       children: [
-                        Icon(Icons.lightbulb, color: Colors.blue[700], size: 20),
+                        Icon(
+                          Icons.lightbulb,
+                          color: Colors.blue[700],
+                          size: 20,
+                        ),
                         const SizedBox(width: 8),
                         const Text(
                           'Recommendations',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ],
                     ),
@@ -848,7 +933,11 @@ class _PatientDashboardState extends State<PatientDashboard> {
                       ),
                       child: Text(
                         recommendations.toString(),
-                        style: TextStyle(fontSize: 14, color: Colors.grey[800], height: 1.5),
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[800],
+                          height: 1.5,
+                        ),
                       ),
                     ),
                   ],
@@ -875,7 +964,11 @@ class _PatientDashboardState extends State<PatientDashboard> {
           const SizedBox(height: 16),
           Text(
             'No assessments yet',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.grey[600]),
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey[600],
+            ),
           ),
           const SizedBox(height: 8),
           Text(
@@ -888,9 +981,12 @@ class _PatientDashboardState extends State<PatientDashboard> {
     );
   }
 
+  // This is the COMPLETE and CORRECT _buildProfileView() method
+  // Replace your entire _buildProfileView() method with this:
+
   Widget _buildProfileView() {
     final hasChw = _profile['chw'] != null;
-    
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -906,7 +1002,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.pink.withValues(alpha: 0.3),
+                  color: Colors.pink.withOpacity(0.3),
                   blurRadius: 15,
                   offset: const Offset(0, 5),
                 ),
@@ -923,7 +1019,11 @@ class _PatientDashboardState extends State<PatientDashboard> {
                   child: CircleAvatar(
                     radius: 50,
                     backgroundColor: Colors.white,
-                    child: Icon(Icons.person, size: 50, color: Colors.pink[400]),
+                    child: Icon(
+                      Icons.person,
+                      size: 50,
+                      color: Colors.pink[400],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -944,9 +1044,12 @@ class _PatientDashboardState extends State<PatientDashboard> {
                 ),
                 const SizedBox(height: 12),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
+                    color: Colors.white.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Row(
@@ -977,12 +1080,14 @@ class _PatientDashboardState extends State<PatientDashboard> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                gradient: LinearGradient(colors: [Colors.blue[50]!, Colors.blue[100]!]),
+                gradient: LinearGradient(
+                  colors: [Colors.blue[50]!, Colors.blue[100]!],
+                ),
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: Colors.blue[200]!),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.blue.withValues(alpha: 0.1),
+                    color: Colors.blue.withOpacity(0.1),
                     blurRadius: 10,
                     offset: const Offset(0, 3),
                   ),
@@ -999,13 +1104,21 @@ class _PatientDashboardState extends State<PatientDashboard> {
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: Icon(Icons.medical_services, color: Colors.blue[700], size: 24),
+                        child: Icon(
+                          Icons.medical_services,
+                          color: Colors.blue[700],
+                          size: 24,
+                        ),
                       ),
                       const SizedBox(width: 12),
                       const Expanded(
                         child: Text(
                           'Your Community Health Worker',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
                         ),
                       ),
                     ],
@@ -1045,19 +1158,17 @@ class _PatientDashboardState extends State<PatientDashboard> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Calling ${_profile['chw']['full_name']}...'), backgroundColor: Colors.blue),
-                        );
-                      },
+                      onPressed: _callCHW,
                       icon: const Icon(Icons.call, size: 20),
-                      label: const Text('Contact CHW'),
+                      label: const Text('Call CHW'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.blue[600],
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         elevation: 0,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                     ),
                   ),
@@ -1068,9 +1179,21 @@ class _PatientDashboardState extends State<PatientDashboard> {
           ],
           _buildSectionDivider('Personal Information'),
           const SizedBox(height: 16),
-          _buildProfileItem('Full Name', _profile['full_name'] ?? 'Not set', Icons.person),
-          _buildProfileItem('Email', _profile['email'] ?? 'Not set', Icons.email),
-          _buildProfileItem('Phone', _profile['phone'] ?? 'Not set', Icons.phone),
+          _buildProfileItem(
+            'Full Name',
+            _profile['full_name'] ?? 'Not set',
+            Icons.person,
+          ),
+          _buildProfileItem(
+            'Email',
+            _profile['email'] ?? 'Not set',
+            Icons.email,
+          ),
+          _buildProfileItem(
+            'Phone',
+            _profile['phone'] ?? 'Not set',
+            Icons.phone,
+          ),
           const SizedBox(height: 24),
           _buildSectionDivider('Health Information'),
           const SizedBox(height: 16),
@@ -1120,7 +1243,12 @@ class _PatientDashboardState extends State<PatientDashboard> {
           const SizedBox(height: 24),
           _buildSectionDivider('Location'),
           const SizedBox(height: 16),
-          _buildProfileItem('Region', _profile['region'] ?? 'Not set', Icons.location_on, isMultiline: true),
+          _buildProfileItem(
+            'Region',
+            _profile['region'] ?? 'Not set',
+            Icons.location_on,
+            isMultiline: true,
+          ),
           const SizedBox(height: 24),
           SizedBox(
             width: double.infinity,
@@ -1129,7 +1257,9 @@ class _PatientDashboardState extends State<PatientDashboard> {
               onPressed: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const ProfileCompletionScreen()),
+                  MaterialPageRoute(
+                    builder: (context) => const ProfileCompletionScreen(),
+                  ),
                 ).then((_) => _fetchProfile());
               },
               icon: const Icon(Icons.edit, size: 22),
@@ -1141,8 +1271,10 @@ class _PatientDashboardState extends State<PatientDashboard> {
                 backgroundColor: Colors.pink[400],
                 foregroundColor: Colors.white,
                 elevation: 2,
-                shadowColor: Colors.pink.withValues(alpha: 0.3),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                shadowColor: Colors.pink.withOpacity(0.3),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
               ),
             ),
           ),
@@ -1155,8 +1287,17 @@ class _PatientDashboardState extends State<PatientDashboard> {
                 final confirm = await showDialog<bool>(
                   context: context,
                   builder: (context) => AlertDialog(
-                    title: const Text('Logout'),
-                    content: const Text('Are you sure you want to logout?'),
+                    title: const Row(
+                      children: [
+                        Icon(Icons.logout, color: Colors.red),
+                        SizedBox(width: 12),
+                        Text('Logout'),
+                      ],
+                    ),
+                    content: const Text(
+                      'Are you sure you want to logout?',
+                      style: TextStyle(fontSize: 15),
+                    ),
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.pop(context, false),
@@ -1173,10 +1314,38 @@ class _PatientDashboardState extends State<PatientDashboard> {
                     ],
                   ),
                 );
-                
+
                 if (confirm == true && mounted) {
-                  await _authService.logout();
-                  Navigator.of(context).pushReplacementNamed('/login');
+                  showDialog(
+                    context: context,
+                    barrierDismissible: false,
+                    builder: (context) =>
+                        const Center(child: CircularProgressIndicator()),
+                  );
+
+                  try {
+                    await _authService.logout();
+
+                    if (mounted) {
+                      Navigator.pop(context);
+                      Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute(
+                          builder: (context) => const LoginScreen(),
+                        ),
+                        (route) => false,
+                      );
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Logout failed: $e'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
                 }
               },
               icon: const Icon(Icons.logout, size: 22),
@@ -1187,7 +1356,9 @@ class _PatientDashboardState extends State<PatientDashboard> {
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.red,
                 side: const BorderSide(color: Colors.red, width: 2),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
               ),
             ),
           ),
@@ -1196,9 +1367,17 @@ class _PatientDashboardState extends State<PatientDashboard> {
     );
   }
 
-  Widget _buildChwDetailRow(IconData icon, String label, String value, Color color, {bool isMultiline = false}) {
+  Widget _buildChwDetailRow(
+    IconData icon,
+    String label,
+    String value,
+    Color color, {
+    bool isMultiline = false,
+  }) {
     return Row(
-      crossAxisAlignment: isMultiline ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+      crossAxisAlignment: isMultiline
+          ? CrossAxisAlignment.start
+          : CrossAxisAlignment.center,
       children: [
         Container(
           padding: const EdgeInsets.all(8),
@@ -1213,7 +1392,14 @@ class _PatientDashboardState extends State<PatientDashboard> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[600], fontWeight: FontWeight.w500)),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.grey[600],
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
               const SizedBox(height: 2),
               Text(
                 value,
@@ -1238,12 +1424,19 @@ class _PatientDashboardState extends State<PatientDashboard> {
         Container(
           width: 4,
           height: 24,
-          decoration: BoxDecoration(color: Colors.pink[400], borderRadius: BorderRadius.circular(2)),
+          decoration: BoxDecoration(
+            color: Colors.pink[400],
+            borderRadius: BorderRadius.circular(2),
+          ),
         ),
         const SizedBox(width: 12),
         Text(
           title,
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey[800]),
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.grey[800],
+          ),
         ),
         const SizedBox(width: 12),
         Expanded(child: Divider(color: Colors.grey[300], thickness: 1)),
@@ -1251,7 +1444,12 @@ class _PatientDashboardState extends State<PatientDashboard> {
     );
   }
 
-  Widget _buildCompactStatCard(String label, String value, IconData icon, Color color) {
+  Widget _buildCompactStatCard(
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -1279,19 +1477,32 @@ class _PatientDashboardState extends State<PatientDashboard> {
           const SizedBox(height: 12),
           Text(
             value,
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color),
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
           ),
           const SizedBox(height: 4),
           Text(
             label,
-            style: TextStyle(fontSize: 12, color: Colors.grey[600], fontWeight: FontWeight.w500),
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey[600],
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildProfileItem(String label, String value, IconData icon, {bool isMultiline = false}) {
+  Widget _buildProfileItem(
+    String label,
+    String value,
+    IconData icon, {
+    bool isMultiline = false,
+  }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -1301,7 +1512,9 @@ class _PatientDashboardState extends State<PatientDashboard> {
         border: Border.all(color: Colors.grey[200]!),
       ),
       child: Row(
-        crossAxisAlignment: isMultiline ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+        crossAxisAlignment: isMultiline
+            ? CrossAxisAlignment.start
+            : CrossAxisAlignment.center,
         children: [
           Container(
             padding: const EdgeInsets.all(8),
@@ -1316,11 +1529,17 @@ class _PatientDashboardState extends State<PatientDashboard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                Text(
+                  label,
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                ),
                 const SizedBox(height: 2),
                 Text(
                   value,
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
                   maxLines: isMultiline ? null : 1,
                   overflow: isMultiline ? null : TextOverflow.ellipsis,
                 ),
